@@ -22,37 +22,32 @@ struct CrackedSwiftWidgetLiveActivity: Widget {
             // Lock Screen/Banner UI
             VStack(spacing: 12) {
                 HStack(spacing: 12) {
-                    // Egg image with fallback
+                    // Egg image with fallback (piggybank: banknote icon if asset missing)
                     Group {
-                        // Try loading from main bundle first
                         if let uiImage = Self.loadEggUIImage(named: context.attributes.eggImageName) {
                             Image(uiImage: uiImage)
                                 .resizable()
                                 .aspectRatio(contentMode: .fit)
                                 .frame(width: 50, height: 50)
+                        } else if Self.isPiggybank(context.attributes.eggName) {
+                            Image(systemName: "banknote.fill")
+                                .font(.system(size: 40))
+                                .foregroundColor(.yellow)
+                                .frame(width: 50, height: 50)
                         } else {
-                            // Fallback: try system image or placeholder
                             Image(systemName: "oval.fill")
                                 .font(.system(size: 40))
                                 .foregroundColor(.appButtonGreen)
-                                .overlay(
-                                    // Debug: show what image name we're looking for
-                                    Text(context.attributes.eggImageName)
-                                        .font(.caption2)
-                                        .foregroundColor(.white)
-                                        .padding(2)
-                                        .background(Color.black.opacity(0.7))
-                                        .cornerRadius(4)
-                                )
+                                .frame(width: 50, height: 50)
                         }
                     }
                     
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Hatching \(context.attributes.eggName)")
+                        Text(Self.isPiggybank(context.attributes.eggName) ? context.attributes.eggName : "Hatching \(context.attributes.eggName)")
                             .font(.headline)
                             .foregroundColor(.white)
                         if context.state.isRunning {
-                            Text("Incubating...")
+                            Text(Self.isPiggybank(context.attributes.eggName) ? "Shaking..." : "Incubating...")
                                 .font(.subheadline)
                                 .foregroundColor(.appButtonGreen)
                         }
@@ -95,6 +90,11 @@ struct CrackedSwiftWidgetLiveActivity: Widget {
                                     .resizable()
                                     .aspectRatio(contentMode: .fit)
                                     .frame(width: 40, height: 40)
+                            } else if Self.isPiggybank(context.attributes.eggName) {
+                                Image(systemName: "banknote.fill")
+                                    .font(.system(size: 30))
+                                    .foregroundColor(.yellow)
+                                    .frame(width: 40, height: 40)
                             } else {
                                 Image(systemName: "oval.fill")
                                     .font(.system(size: 30))
@@ -106,7 +106,7 @@ struct CrackedSwiftWidgetLiveActivity: Widget {
                                 .font(.caption)
                                 .bold()
                             if context.state.isRunning {
-                                Text("Incubating")
+                                Text(Self.isPiggybank(context.attributes.eggName) ? "Shaking" : "Incubating")
                                     .font(.caption2)
                                     .foregroundColor(.appButtonGreen)
                             }
@@ -153,6 +153,11 @@ struct CrackedSwiftWidgetLiveActivity: Widget {
                             .resizable()
                             .aspectRatio(contentMode: .fit)
                             .frame(width: 22, height: 22)
+                    } else if Self.isPiggybank(context.attributes.eggName) {
+                        Image(systemName: "banknote.fill")
+                            .font(.system(size: 18))
+                            .foregroundColor(.yellow)
+                            .frame(width: 22, height: 22)
                     } else {
                         Image(systemName: "oval.fill")
                             .font(.system(size: 18))
@@ -178,6 +183,11 @@ struct CrackedSwiftWidgetLiveActivity: Widget {
                         Image(uiImage: uiImage)
                             .resizable()
                             .aspectRatio(contentMode: .fit)
+                            .frame(width: 20, height: 20)
+                    } else if Self.isPiggybank(context.attributes.eggName) {
+                        Image(systemName: "banknote.fill")
+                            .font(.system(size: 16))
+                            .foregroundColor(.yellow)
                             .frame(width: 20, height: 20)
                     } else {
                         Image(systemName: "oval.fill")
@@ -211,38 +221,88 @@ struct CrackedSwiftWidgetLiveActivity: Widget {
         return String(format: "%02d:%02d", minutes, secs)
     }
 
-    /// Widget extensions run in a separate bundle. This locates the containing
-    /// app bundle so we can load shared assets (egg images) from the main app.
+    /// Widget extensions run in a separate bundle. Host app bundle is where
+    /// egg/piggybank assets live; load from here so the widget can show them.
     private static func hostAppBundle() -> Bundle? {
-        // .../CrackedSwift.app/PlugIns/CrackedSwiftWidgetExtension.appex
+        // Prefer bundle by identifier (reliable for app extensions)
+        if let appBundle = Bundle(identifier: "Cracked.CrackedSwift") {
+            return appBundle
+        }
+        // Fallback: derive from extension path .../CrackedSwift.app/PlugIns/...appex
         let extensionBundleURL = Bundle.main.bundleURL
         let appBundleURL = extensionBundleURL
-            .deletingLastPathComponent() // PlugIns
-            .deletingLastPathComponent() // CrackedSwift.app
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
         return Bundle(url: appBundleURL)
     }
 
+    // MARK: - Memory-safe image loading (widgets have ~30MB limit)
+    /// Max display size used in the widget; we decode at this size to avoid holding full-res bitmaps.
+    private static let widgetImagePointSize: CGFloat = 50
+    /// Single-entry cache: only one downscaled image in memory to prevent widget OOM.
+    private static var cachedEggImage: (name: String, image: UIImage)?
+    private static let cacheLock = NSLock()
+
+    /// Load egg/piggybank image: try host app bundle first (assets live there),
+    /// then extension bundle. Returns a small downscaled bitmap and caches at most one image.
     private static func loadEggUIImage(named name: String) -> UIImage? {
-        // Piggybank asset is named "PiggyBank" — use it whenever the egg is piggybank.
-        var candidates: [String] = []
+        let cacheKey = name
+        cacheLock.lock()
+        if let cached = cachedEggImage, cached.name == cacheKey {
+            let img = cached.image
+            cacheLock.unlock()
+            return img
+        }
+        cacheLock.unlock()
+
+        let candidates: [String]
         if name.lowercased() == "piggybank" {
-            candidates = ["PiggyBank"]
-            if name != "PiggyBank" { candidates.append(name) }
+            candidates = ["PiggyBank", "Piggybank"]
         } else {
             candidates = [name]
         }
 
-        // Try host app bundle first, then extension bundle.
         let bundles: [Bundle] = [hostAppBundle(), .main].compactMap { $0 }
-
-        for candidate in candidates {
-            for bundle in bundles {
-                if let img = UIImage(named: candidate, in: bundle, compatibleWith: nil) {
-                    return img
+        let downscaled: UIImage? = autoreleasepool {
+            var fullRes: UIImage?
+            for candidate in candidates {
+                for bundle in bundles {
+                    if let img = UIImage(named: candidate, in: bundle, compatibleWith: nil) {
+                        fullRes = img
+                        break
+                    }
                 }
+                if fullRes != nil { break }
             }
+            guard let source = fullRes else { return nil }
+            return downscaleImage(source, maxPointSize: widgetImagePointSize) ?? source
         }
 
-        return nil
+        guard let img = downscaled else { return nil }
+        cacheLock.lock()
+        cachedEggImage = (cacheKey, img)
+        cacheLock.unlock()
+        return img
+    }
+
+    /// Decode image at a small size to reduce widget memory (full-res decoding can be 1–10+ MB per image).
+    private static func downscaleImage(_ image: UIImage, maxPointSize: CGFloat) -> UIImage? {
+        let scale: CGFloat = 2 // Fixed scale in widget to avoid UIScreen dependency; 50pt → 100px is enough.
+        let maxPixels = Int(maxPointSize * scale)
+        let size = image.size
+        guard size.width > 0, size.height > 0 else { return nil }
+        let ratio = min(CGFloat(maxPixels) / size.width, CGFloat(maxPixels) / size.height)
+        if ratio >= 1 { return image }
+        let newSize = CGSize(width: size.width * ratio, height: size.height * ratio)
+        let renderer = UIGraphicsImageRenderer(size: newSize)
+        let resized = renderer.image { _ in
+            image.draw(in: CGRect(origin: .zero, size: newSize))
+        }
+        return resized
+    }
+
+    /// Whether the current egg is Piggybank (for fallback icon).
+    private static func isPiggybank(_ eggName: String) -> Bool {
+        eggName.lowercased() == "piggybank"
     }
 }

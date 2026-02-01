@@ -27,6 +27,7 @@ struct MenuView: View {
     @State private var initialTimerDuration: TimeInterval = 0
     @State private var showingStreakRewards = false
     @State private var showingPiggybankShatteredAlert = false
+    @State private var showingPiggybankResult = false
     
     // Computed property to get current egg image name
     private var currentEggImageName: String {
@@ -246,6 +247,9 @@ struct MenuView: View {
                     HatchResultView(animal: animal, coinsEarned: coinsEarned)
                 }
             }
+            .sheet(isPresented: $showingPiggybankResult) {
+                PiggybankResultView(coinsEarned: coinsEarned)
+            }
             .sheet(isPresented: $showingStreakRewards) {
                 StreakRewardsView()
             }
@@ -255,9 +259,10 @@ struct MenuView: View {
     private func handleTimerComplete(studyDuration: TimeInterval) {
         // Check if piggybank mode - if so, just show coins, no animal hatching
         if let currentEgg = shopManager.getCurrentEgg(), currentEgg == "Piggybank" {
-            // Piggybank mode: just show coins earned, no animal
+            // Piggybank mode: show completion screen with coins earned
             hatchedAnimal = nil
             showingHatchResult = false
+            showingPiggybankResult = true
             initialTimerDuration = 0
             return
         }
@@ -506,6 +511,79 @@ struct HatchResultView: View {
                 
                 Text("+\(coinsEarned) Coins")
                         .font(.headline)
+                    .foregroundColor(.yellow)
+                
+                Button(action: {
+                    dismiss()
+                }) {
+                    Text("Continue")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .padding()
+                        .frame(maxWidth: .infinity)
+                        .background(AppColors.buttonGreen)
+                        .cornerRadius(10)
+                }
+                .padding(.horizontal, 40)
+            }
+            .padding()
+        }
+    }
+}
+
+struct PiggybankResultView: View {
+    let coinsEarned: Int
+    @Environment(\.dismiss) var dismiss
+    
+    var body: some View {
+        ZStack {
+            AppColors.backgroundGreen
+                .ignoresSafeArea()
+            
+            VStack(spacing: 30) {
+                Text("🎉 Coins Saved!")
+                    .font(.largeTitle)
+                    .fontWeight(.bold)
+                    .foregroundColor(.white)
+                
+                Text("You completed your study session!\nYour piggy bank is full.")
+                    .font(.title3)
+                    .fontWeight(.medium)
+                    .foregroundColor(.white.opacity(0.9))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+                
+                // Piggy bank / coins image
+                Group {
+                    if UIImage(named: "Piggybank") != nil {
+                        Image("Piggybank")
+                            .resizable()
+                            .scaledToFit()
+                    } else if UIImage(named: "PiggyBank") != nil {
+                        Image("PiggyBank")
+                            .resizable()
+                            .scaledToFit()
+                    } else {
+                        Image(systemName: "banknote.fill")
+                            .font(.system(size: 80))
+                            .foregroundColor(AppColors.coinGold)
+                    }
+                }
+                .frame(width: 200, height: 200)
+                .background(
+                    RoundedRectangle(cornerRadius: 20)
+                        .fill(Color.white.opacity(0.1))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20)
+                        .stroke(Color.white.opacity(0.3), lineWidth: 2)
+                )
+                .cornerRadius(20)
+                .shadow(color: .black.opacity(0.3), radius: 10, x: 0, y: 5)
+                
+                Text("+\(coinsEarned) Coins")
+                    .font(.title)
+                    .fontWeight(.bold)
                     .foregroundColor(.yellow)
                 
                 Button(action: {

@@ -64,6 +64,20 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		7E7E0F3A2F300721007B7BCC /* Exceptions for "CrackedSwift" folder in "CrackedSwiftTests" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Assets.xcassets,
+			);
+			target = 7E7C8C792EB782C800A33F5A /* CrackedSwiftTests */;
+		};
+		7E7E0F3B2F300721007B7BCC /* Exceptions for "CrackedSwift" folder in "CrackedSwiftUITests" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Assets.xcassets,
+			);
+			target = 7E7C8C832EB782C800A33F5A /* CrackedSwiftUITests */;
+		};
 		7E7E75912ED3B1B7002B0B89 /* Exceptions for "CrackedSwiftWidget" folder in "CrackedSwiftWidgetExtension" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -93,6 +107,8 @@
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
 				7E7E759B2ED3BEBC002B0B89 /* Exceptions for "CrackedSwift" folder in "CrackedSwift" target */,
+				7E7E0F3A2F300721007B7BCC /* Exceptions for "CrackedSwift" folder in "CrackedSwiftTests" target */,
+				7E7E0F3B2F300721007B7BCC /* Exceptions for "CrackedSwift" folder in "CrackedSwiftUITests" target */,
 				7E7E75992ED3BB7D002B0B89 /* Exceptions for "CrackedSwift" folder in "CrackedSwiftWidgetExtension" target */,
 			);
 			path = CrackedSwift;
