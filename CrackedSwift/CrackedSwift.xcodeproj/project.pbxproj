@@ -9,6 +9,8 @@
 /* Begin PBXBuildFile section */
 		7E32869E2ECE6D4A00B311A6 /* MultipeerConnectivity.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7E32869D2ECE6D4A00B311A6 /* MultipeerConnectivity.framework */; };
 		7E3286A02ECE70B400B311A6 /* GameKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7E32869F2ECE70B400B311A6 /* GameKit.framework */; };
+		7E7E0F582F3014CC007B7BCC /* DeviceActivity.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7E7E0F452F301494007B7BCC /* DeviceActivity.framework */; };
+		7E7E0F602F3014CC007B7BCC /* DeviceActivityExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 7E7E0F572F3014CC007B7BCC /* DeviceActivityExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		7E7E757D2ED3B1B6002B0B89 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7E7E757C2ED3B1B6002B0B89 /* WidgetKit.framework */; };
 		7E7E757F2ED3B1B6002B0B89 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7E7E757E2ED3B1B6002B0B89 /* SwiftUI.framework */; };
 		7E7E75902ED3B1B7002B0B89 /* CrackedSwiftWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 7E7E757B2ED3B1B6002B0B89 /* CrackedSwiftWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -29,6 +31,13 @@
 			remoteGlobalIDString = 7E7C8C692EB782C800A33F5A;
 			remoteInfo = CrackedSwift;
 		};
+		7E7E0F5E2F3014CC007B7BCC /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 7E7C8C622EB782C800A33F5A /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 7E7E0F562F3014CC007B7BCC;
+			remoteInfo = DeviceActivityExtension;
+		};
 		7E7E758E2ED3B1B7002B0B89 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 7E7C8C622EB782C800A33F5A /* Project object */;
@@ -46,6 +55,7 @@
 			dstSubfolderSpec = 13;
 			files = (
 				7E7E75902ED3B1B7002B0B89 /* CrackedSwiftWidgetExtension.appex in Embed Foundation Extensions */,
+				7E7E0F602F3014CC007B7BCC /* DeviceActivityExtension.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -58,6 +68,8 @@
 		7E7C8C6A2EB782C800A33F5A /* CrackedSwift.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CrackedSwift.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		7E7C8C7A2EB782C800A33F5A /* CrackedSwiftTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CrackedSwiftTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		7E7C8C842EB782C800A33F5A /* CrackedSwiftUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CrackedSwiftUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		7E7E0F452F301494007B7BCC /* DeviceActivity.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = DeviceActivity.framework; path = System/Library/Frameworks/DeviceActivity.framework; sourceTree = SDKROOT; };
+		7E7E0F572F3014CC007B7BCC /* DeviceActivityExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = DeviceActivityExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		7E7E757B2ED3B1B6002B0B89 /* CrackedSwiftWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = CrackedSwiftWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		7E7E757C2ED3B1B6002B0B89 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
 		7E7E757E2ED3B1B6002B0B89 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
@@ -77,6 +89,13 @@
 				Assets.xcassets,
 			);
 			target = 7E7C8C832EB782C800A33F5A /* CrackedSwiftUITests */;
+		};
+		7E7E0F642F3014CC007B7BCC /* Exceptions for "DeviceActivityExtension" folder in "DeviceActivityExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 7E7E0F562F3014CC007B7BCC /* DeviceActivityExtension */;
 		};
 		7E7E75912ED3B1B7002B0B89 /* Exceptions for "CrackedSwiftWidget" folder in "CrackedSwiftWidgetExtension" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
@@ -124,6 +143,19 @@
 			path = CrackedSwiftUITests;
 			sourceTree = "<group>";
 		};
+		7E7E0F472F301494007B7BCC /* DeviceActivityTarget */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = DeviceActivityTarget;
+			sourceTree = "<group>";
+		};
+		7E7E0F592F3014CC007B7BCC /* DeviceActivityExtension */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				7E7E0F642F3014CC007B7BCC /* Exceptions for "DeviceActivityExtension" folder in "DeviceActivityExtension" target */,
+			);
+			path = DeviceActivityExtension;
+			sourceTree = "<group>";
+		};
 		7E7E75802ED3B1B6002B0B89 /* CrackedSwiftWidget */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
@@ -158,6 +190,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		7E7E0F542F3014CC007B7BCC /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7E7E0F582F3014CC007B7BCC /* DeviceActivity.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		7E7E75782ED3B1B6002B0B89 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -177,6 +217,7 @@
 				7E32869D2ECE6D4A00B311A6 /* MultipeerConnectivity.framework */,
 				7E7E757C2ED3B1B6002B0B89 /* WidgetKit.framework */,
 				7E7E757E2ED3B1B6002B0B89 /* SwiftUI.framework */,
+				7E7E0F452F301494007B7BCC /* DeviceActivity.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -188,6 +229,8 @@
 				7E7C8C7D2EB782C800A33F5A /* CrackedSwiftTests */,
 				7E7C8C872EB782C800A33F5A /* CrackedSwiftUITests */,
 				7E7E75802ED3B1B6002B0B89 /* CrackedSwiftWidget */,
+				7E7E0F472F301494007B7BCC /* DeviceActivityTarget */,
+				7E7E0F592F3014CC007B7BCC /* DeviceActivityExtension */,
 				7E32869C2ECE6D4A00B311A6 /* Frameworks */,
 				7E7C8C6B2EB782C800A33F5A /* Products */,
 			);
@@ -200,6 +243,7 @@
 				7E7C8C7A2EB782C800A33F5A /* CrackedSwiftTests.xctest */,
 				7E7C8C842EB782C800A33F5A /* CrackedSwiftUITests.xctest */,
 				7E7E757B2ED3B1B6002B0B89 /* CrackedSwiftWidgetExtension.appex */,
+				7E7E0F572F3014CC007B7BCC /* DeviceActivityExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -220,6 +264,7 @@
 			);
 			dependencies = (
 				7E7E758F2ED3B1B7002B0B89 /* PBXTargetDependency */,
+				7E7E0F5F2F3014CC007B7BCC /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				7E7C8C6C2EB782C800A33F5A /* CrackedSwift */,
@@ -277,6 +322,28 @@
 			productReference = 7E7C8C842EB782C800A33F5A /* CrackedSwiftUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		7E7E0F562F3014CC007B7BCC /* DeviceActivityExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 7E7E0F612F3014CC007B7BCC /* Build configuration list for PBXNativeTarget "DeviceActivityExtension" */;
+			buildPhases = (
+				7E7E0F532F3014CC007B7BCC /* Sources */,
+				7E7E0F542F3014CC007B7BCC /* Frameworks */,
+				7E7E0F552F3014CC007B7BCC /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				7E7E0F592F3014CC007B7BCC /* DeviceActivityExtension */,
+			);
+			name = DeviceActivityExtension;
+			packageProductDependencies = (
+			);
+			productName = DeviceActivityExtension;
+			productReference = 7E7E0F572F3014CC007B7BCC /* DeviceActivityExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		7E7E757A2ED3B1B6002B0B89 /* CrackedSwiftWidgetExtension */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 7E7E75922ED3B1B7002B0B89 /* Build configuration list for PBXNativeTarget "CrackedSwiftWidgetExtension" */;
@@ -306,7 +373,7 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 1640;
+				LastSwiftUpdateCheck = 2620;
 				LastUpgradeCheck = 1640;
 				TargetAttributes = {
 					7E7C8C692EB782C800A33F5A = {
@@ -319,6 +386,9 @@
 					7E7C8C832EB782C800A33F5A = {
 						CreatedOnToolsVersion = 16.4;
 						TestTargetID = 7E7C8C692EB782C800A33F5A;
+					};
+					7E7E0F562F3014CC007B7BCC = {
+						CreatedOnToolsVersion = 26.2;
 					};
 					7E7E757A2ED3B1B6002B0B89 = {
 						CreatedOnToolsVersion = 16.4;
@@ -343,6 +413,7 @@
 				7E7C8C792EB782C800A33F5A /* CrackedSwiftTests */,
 				7E7C8C832EB782C800A33F5A /* CrackedSwiftUITests */,
 				7E7E757A2ED3B1B6002B0B89 /* CrackedSwiftWidgetExtension */,
+				7E7E0F562F3014CC007B7BCC /* DeviceActivityExtension */,
 			);
 		};
 /* End PBXProject section */
@@ -363,6 +434,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		7E7C8C822EB782C800A33F5A /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7E7E0F552F3014CC007B7BCC /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -400,6 +478,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		7E7E0F532F3014CC007B7BCC /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		7E7E75772ED3B1B6002B0B89 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -419,6 +504,11 @@
 			isa = PBXTargetDependency;
 			target = 7E7C8C692EB782C800A33F5A /* CrackedSwift */;
 			targetProxy = 7E7C8C852EB782C800A33F5A /* PBXContainerItemProxy */;
+		};
+		7E7E0F5F2F3014CC007B7BCC /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 7E7E0F562F3014CC007B7BCC /* DeviceActivityExtension */;
+			targetProxy = 7E7E0F5E2F3014CC007B7BCC /* PBXContainerItemProxy */;
 		};
 		7E7E758F2ED3B1B7002B0B89 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
@@ -718,6 +808,69 @@
 			};
 			name = Release;
 		};
+		7E7E0F622F3014CC007B7BCC /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = DeviceActivityExtension/DeviceActivityExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = UBA48D9VUX;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = DeviceActivityExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = DeviceActivityExtension;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = Cracked.CrackedSwift.DeviceActivityExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		7E7E0F632F3014CC007B7BCC /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = DeviceActivityExtension/DeviceActivityExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = UBA48D9VUX;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = DeviceActivityExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = DeviceActivityExtension;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = Cracked.CrackedSwift.DeviceActivityExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 		7E7E75932ED3B1B7002B0B89 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -812,6 +965,15 @@
 			buildConfigurations = (
 				7E7C8C952EB782C800A33F5A /* Debug */,
 				7E7C8C962EB782C800A33F5A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		7E7E0F612F3014CC007B7BCC /* Build configuration list for PBXNativeTarget "DeviceActivityExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				7E7E0F622F3014CC007B7BCC /* Debug */,
+				7E7E0F632F3014CC007B7BCC /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

@@ -42,10 +42,7 @@ class TimerManager: ObservableObject {
     // Track initial timer duration for calculating actual study time
     private var initialTimerDuration: TimeInterval = 0
     
-    // Background detection state - track if we went through inactive (app switch) or directly to background (sleep)
-    private var wentThroughInactiveState = false
-    
-    // Track when app went to background for calculating elapsed time during phone sleep
+    // Track when app went to background for calculating elapsed time (phone sleep)
     private var backgroundStartTime: Date?
     
     // Break constants
@@ -112,6 +109,8 @@ class TimerManager: ObservableObject {
         )
         
         startTimerTick()
+        // Start Screen Time–based leave-app detection so we only crack when user uses another app, not on lock
+        ScreenTimeManager.shared.startFocusMonitoring(timerDurationSeconds: duration)
         return true
     }
     
@@ -153,6 +152,7 @@ class TimerManager: ObservableObject {
         }
         
         dataManager.clearTimerState()
+        ScreenTimeManager.shared.stopFocusMonitoring()
     }
     
     func resetTimer() {
@@ -209,6 +209,7 @@ class TimerManager: ObservableObject {
         isPiggybankMode = false
         initialTimerDuration = 0
         dataManager.clearTimerState()
+        ScreenTimeManager.shared.stopFocusMonitoring()
     }
     
     // MARK: - Coins
@@ -262,6 +263,7 @@ class TimerManager: ObservableObject {
         stopTimer()
         // stopTimer() already ends the Live Activity, but keep this explicit for safety
         LiveActivityManager.shared.endLiveActivity()
+        ScreenTimeManager.shared.stopFocusMonitoring()
         onSessionFailed?()
     }
     
@@ -415,133 +417,71 @@ class TimerManager: ObservableObject {
     // MARK: - Background Handling
     
     func handleAppBecomingInactive() {
-        // This is called when app becomes inactive
-        // In iOS, app switching often goes through inactive state
-        // So if we go through inactive, it's likely an app switch - mark it
-        if isTimerRunning {
-            wentThroughInactiveState = true
-        }
+        // No-op. Screen Time (Device Activity) sets violation when user uses a monitored app.
     }
     
     func handleAppBackgrounded() {
-        // If on break, allow app switching without cracking egg
-        if isOnBreak {
-            return
-        }
+        // Never crack here. Screen Time extension sets a violation flag when user uses another app;
+        // we crack only when returning and seeing that flag.
+        if isOnBreak { return }
+        guard isTimerRunning else { return }
         
-        guard isTimerRunning else {
-            return
-        }
-        
-        // In piggybank mode: app switch = shatter and lose all coins (like eggs)
-        if isPiggybankMode {
-            if wentThroughInactiveState {
-                shatterPiggybankDueToAppSwitch()
-                return
-            }
-            // Phone sleep (no inactive first): let timer continue
-            let bgTime = Date()
-            backgroundStartTime = bgTime
-            dataManager.saveTimerState(timeRemaining: timeRemaining, wasRunning: true, sessionStartTime: sessionStartTime, activeEggTitle: activeEggTitle, isPiggybankMode: isPiggybankMode, backgroundTime: bgTime)
-            stopTimerTick()
-            return
-        }
-        
-        // Normal mode: check for egg
-        guard let eggTitle = activeEggTitle else {
-            return
-        }
-        
-        let appState = UIApplication.shared.applicationState
-        
-        // If we went through inactive state first, it's app switching - crack the egg
-        if wentThroughInactiveState {
-            // App switch - crack immediately
-            crackEggDueToAppSwitch(eggTitle: eggTitle)
-            return
-        }
-        
-        // No inactive state first = direct to background = phone sleep
-        // Don't pause - let timer continue conceptually, we'll adjust time when we come back
-        if appState == .background {
-            // Phone sleep - save background time to calculate elapsed time
-            let bgTime = Date()
-            backgroundStartTime = bgTime
-            // Save state with current time remaining, running status, and background time
-            dataManager.saveTimerState(timeRemaining: timeRemaining, wasRunning: true, sessionStartTime: sessionStartTime, activeEggTitle: activeEggTitle, isPiggybankMode: isPiggybankMode, backgroundTime: bgTime)
-            // Stop the timer tick (it will stop anyway when app suspends)
-            // But keep isTimerRunning = true so we know timer should still be running
-            stopTimerTick()
-        }
+        let bgTime = Date()
+        backgroundStartTime = bgTime
+        print("[CrackedSwift] ⏸️ SLEEP/BACKGROUND: App went to background (timer paused; crack only if Screen Time violation)")
+        dataManager.saveTimerState(timeRemaining: timeRemaining, wasRunning: true, sessionStartTime: sessionStartTime, activeEggTitle: activeEggTitle, isPiggybankMode: isPiggybankMode, backgroundTime: bgTime)
+        stopTimerTick()
     }
     
     func handleAppForegrounded() {
         let appState = UIApplication.shared.applicationState
-        
-        // Only proceed if app is actually active
         guard appState == .active else { return }
         
         // Check if break expired while app was backgrounded
         if isOnBreak {
             if let breakState = dataManager.restoreBreakState() {
                 if breakState.timeRemaining <= 0 {
-                    // Break expired - end it
                     endBreak()
                 } else {
-                    // Update break time remaining
                     breakTimeRemaining = breakState.timeRemaining
-                    // Restart break timer if not already running
-                    if breakTimer == nil {
-                        startBreakTimer()
-                    }
+                    if breakTimer == nil { startBreakTimer() }
                 }
             }
         }
         
-        // Handle timer resumption/adjustment
-        if activeEggTitle != nil && timeRemaining > 0 && !isOnBreak {
-            // Check if timer was running before app went to background
-            if let state = dataManager.restoreTimerState(), state.wasRunning {
-                // Timer was running - adjust for elapsed time
-                if let bgStartTime = backgroundStartTime {
-                    // Phone sleep scenario - calculate elapsed time and adjust remaining time
-                    let elapsed = Date().timeIntervalSince(bgStartTime)
-                    timeRemaining = max(0, timeRemaining - elapsed)
-                    
-                    // Check if timer expired
-                    if timeRemaining <= 0 {
-                        timerCompleted()
-                    } else {
-                        // Timer still has time - resume it
-                        isTimerRunning = true
-                        LiveActivityManager.shared.updateLiveActivity(timeRemaining: timeRemaining, isRunning: true)
-                        startTimerTick()
-                        // Update saved state (clear background time since we're resuming)
-                        dataManager.saveTimerState(timeRemaining: timeRemaining, wasRunning: true, sessionStartTime: sessionStartTime, activeEggTitle: activeEggTitle, isPiggybankMode: isPiggybankMode, backgroundTime: nil)
-                    }
-                    
-                    backgroundStartTime = nil
-                } else {
-                    // Timer was running but timer tick might have been stopped (phone sleep scenario)
-                    // Check if timer tick needs to be restarted
-                    if timer == nil && !wentThroughInactiveState {
-                        // Timer tick was stopped (phone sleep) - restart it
-                        isTimerRunning = true
-                        LiveActivityManager.shared.updateLiveActivity(timeRemaining: timeRemaining, isRunning: true)
-                        startTimerTick()
-                        // Update saved state
-                        dataManager.saveTimerState(timeRemaining: timeRemaining, wasRunning: true, sessionStartTime: sessionStartTime, activeEggTitle: activeEggTitle, isPiggybankMode: isPiggybankMode, backgroundTime: nil)
-                    }
-                    // If wentThroughInactiveState is true, it was an app switch - don't resume
-                    // (egg should have been cracked already in handleAppBackgrounded)
-                }
-                // If wentThroughInactiveState is true, it was an app switch - don't resume
-                // (egg should have been cracked already in handleAppBackgrounded)
+        // Only crack if: (1) timer was running, (2) we actually went to background, (3) Screen Time violation is set
+        let hadViolation = ScreenTimeManager.shared.checkAndClearViolation()
+        if isTimerRunning, backgroundStartTime != nil, hadViolation {
+            print("[CrackedSwift] 🔴 Foreground: LEFT APP (Screen Time violation while in background) → cracking/shattering")
+            if isPiggybankMode {
+                shatterPiggybankDueToAppSwitch()
+            } else if let eggTitle = activeEggTitle {
+                crackEggDueToAppSwitch(eggTitle: eggTitle)
+            }
+            backgroundStartTime = nil
+            return
+        }
+        if hadViolation && backgroundStartTime == nil {
+            print("[CrackedSwift] ⚠️ Foreground: violation flag was set but we never went to background — ignoring (false positive)")
+        }
+        
+        // No violation: resume timer (subtract time spent in background)
+        if activeEggTitle != nil && timeRemaining > 0 && !isOnBreak,
+           let state = dataManager.restoreTimerState(), state.wasRunning,
+           let bgStartTime = backgroundStartTime {
+            let elapsed = Date().timeIntervalSince(bgStartTime)
+            print("[CrackedSwift] 🟢 Foreground: no violation → resuming timer, elapsed \(String(format: "%.1f", elapsed))s")
+            timeRemaining = max(0, timeRemaining - elapsed)
+            if timeRemaining <= 0 {
+                timerCompleted()
+            } else {
+                isTimerRunning = true
+                LiveActivityManager.shared.updateLiveActivity(timeRemaining: timeRemaining, isRunning: true)
+                startTimerTick()
+                dataManager.saveTimerState(timeRemaining: timeRemaining, wasRunning: true, sessionStartTime: sessionStartTime, activeEggTitle: activeEggTitle, isPiggybankMode: isPiggybankMode, backgroundTime: nil)
             }
         }
         
-        // Reset state for next time
-        wentThroughInactiveState = false
         backgroundStartTime = nil
     }
     
@@ -574,8 +514,8 @@ class TimerManager: ObservableObject {
         timeRemaining = 0
         initialTimerDuration = 0
         sessionStartTime = nil
-        wentThroughInactiveState = false
         dataManager.clearTimerState()
+        ScreenTimeManager.shared.stopFocusMonitoring()
     }
     
     private func shatterPiggybankDueToAppSwitch() {
@@ -588,8 +528,8 @@ class TimerManager: ObservableObject {
         timeRemaining = 0
         initialTimerDuration = 0
         sessionStartTime = nil
-        wentThroughInactiveState = false
         dataManager.clearTimerState()
+        ScreenTimeManager.shared.stopFocusMonitoring()
         onPiggybankShattered?()
         onSessionFailed?()
     }

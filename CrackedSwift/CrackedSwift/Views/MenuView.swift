@@ -28,6 +28,7 @@ struct MenuView: View {
     @State private var showingStreakRewards = false
     @State private var showingPiggybankShatteredAlert = false
     @State private var showingPiggybankResult = false
+    @State private var showingLeaveAppSelection = false
     
     // Computed property to get current egg image name
     private var currentEggImageName: String {
@@ -185,6 +186,17 @@ struct MenuView: View {
                             .font(.subheadline)
                             .foregroundColor(.white)
                         }
+                        // Screen Time: apps that count as "leaving" (lock screen does not crack)
+                        Button(action: {
+                            showingLeaveAppSelection = true
+                        }) {
+                            HStack {
+                                Image(systemName: "app.badge")
+                                Text(ScreenTimeManager.shared.hasSelectedApps ? "Apps that count as leaving (set)" : "Set apps that count as leaving")
+                            }
+                            .font(.subheadline)
+                            .foregroundColor(.white.opacity(0.9))
+                        }
                     }
                 }
                 .padding(.bottom, 100)
@@ -252,6 +264,9 @@ struct MenuView: View {
             }
             .sheet(isPresented: $showingStreakRewards) {
                 StreakRewardsView()
+            }
+            .sheet(isPresented: $showingLeaveAppSelection) {
+                LeaveAppSelectionView(isPresented: $showingLeaveAppSelection)
             }
         }
     }

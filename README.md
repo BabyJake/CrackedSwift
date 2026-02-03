@@ -25,7 +25,7 @@ A focus/study timer app for iOS. Set a timer with an egg; if you leave the app o
 
 ## Leave-app detection
 
-The app uses Apple’s Device Activity (Screen Time) API to tell “left the app” from “locked the phone.” Users choose “Set apps that count as leaving” in the timer screen; if they switch to one of those apps for 5+ seconds, the egg cracks (or piggybank shatters) when they return. Lock screen and quick returns do not. Screen Time authorization is requested on first run.
+The app uses Apple’s Device Activity (Screen Time) API so that **locking the phone** does not crack the egg or shatter the piggybank; only **using another app** does. Users tap “Set apps that count as leaving” on the timer screen and pick which apps to monitor. If they use one of those apps during a focus session, the egg cracks (or piggybank shatters) when they return. Locking the device does not. Screen Time authorization is requested on first run. See **DEVICE_ACTIVITY_SETUP.md** to add the Device Activity Monitor extension target in Xcode.
 
 ## Other docs
 
