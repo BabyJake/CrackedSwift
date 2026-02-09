@@ -34,7 +34,7 @@ struct ContentView: View {
                 }
                 .tag(2)
         }
-        .alert("Login Streak!", isPresented: Binding(
+        .alert("Study Streak!", isPresented: Binding(
             get: { gameData.streakAlertInfo?.show ?? false },
             set: { if !$0 { gameData.dismissStreakAlert() } }
         )) {

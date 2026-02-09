@@ -43,21 +43,30 @@ struct CrackedSwiftWidgetLiveActivity: Widget {
                     }
                     
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(Self.isPiggybank(context.attributes.eggName) ? context.attributes.eggName : "Hatching \(context.attributes.eggName)")
-                            .font(.headline)
-                            .foregroundColor(.white)
-                        if context.state.isRunning {
-                            Text(Self.isPiggybank(context.attributes.eggName) ? "Shaking..." : "Incubating...")
-                                .font(.subheadline)
-                                .foregroundColor(.appButtonGreen)
+                        if Self.isReadyState(context) {
+                            Text(Self.readyTitle(context))
+                                .font(.headline)
+                                .foregroundColor(.white)
+                        } else {
+                            Text(Self.isPiggybank(context.attributes.eggName) ? context.attributes.eggName : "Hatching \(context.attributes.eggName)")
+                                .font(.headline)
+                                .foregroundColor(.white)
+                            if context.state.isRunning {
+                                Text(Self.isPiggybank(context.attributes.eggName) ? "Shaking..." : "Incubating...")
+                                    .font(.subheadline)
+                                    .foregroundColor(.appButtonGreen)
+                            }
                         }
                     }
                     
                     Spacer()
                     
-                    // Timer display
+                    // Timer display (or "Ready!" when at 0:00). Never use timerInterval with past endDate (crashes).
                     Group {
-                        if context.state.isRunning {
+                        if Self.isReadyState(context) {
+                            Text("Ready!")
+                                .font(.system(size: 20, weight: .bold, design: .monospaced))
+                        } else if Self.canShowCountdown(context) {
                             Text(timerInterval: Date()...context.state.endDate, countsDown: true)
                         } else {
                             Text(Self.formatTime(context.state.timeRemaining))
@@ -102,13 +111,19 @@ struct CrackedSwiftWidgetLiveActivity: Widget {
                             }
                         }
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(context.attributes.eggName)
-                                .font(.caption)
-                                .bold()
-                            if context.state.isRunning {
-                                Text(Self.isPiggybank(context.attributes.eggName) ? "Shaking" : "Incubating")
-                                    .font(.caption2)
-                                    .foregroundColor(.appButtonGreen)
+                            if Self.isReadyState(context) {
+                                Text(Self.readyTitle(context))
+                                    .font(.caption)
+                                    .bold()
+                            } else {
+                                Text(context.attributes.eggName)
+                                    .font(.caption)
+                                    .bold()
+                                if context.state.isRunning {
+                                    Text(Self.isPiggybank(context.attributes.eggName) ? "Shaking" : "Incubating")
+                                        .font(.caption2)
+                                        .foregroundColor(.appButtonGreen)
+                                }
                             }
                         }
                     }
@@ -117,7 +132,10 @@ struct CrackedSwiftWidgetLiveActivity: Widget {
                 
                 DynamicIslandExpandedRegion(.trailing) {
                     Group {
-                        if context.state.isRunning {
+                        if Self.isReadyState(context) {
+                            Text("Ready!")
+                                .font(.system(size: 20, weight: .bold, design: .monospaced))
+                        } else if Self.canShowCountdown(context) {
                             Text(timerInterval: Date()...context.state.endDate, countsDown: true)
                         } else {
                             Text(Self.formatTime(context.state.timeRemaining))
@@ -135,7 +153,11 @@ struct CrackedSwiftWidgetLiveActivity: Widget {
                         ProgressView(value: Self.progress(for: context), total: 1.0)
                             .tint(.appButtonGreen)
                         
-                        if context.state.isRunning {
+                        if Self.isReadyState(context) {
+                            Text("Tap to open")
+                                .font(.caption2)
+                                .foregroundColor(.appButtonGreen)
+                        } else if context.state.isRunning {
                             Text("Keep going!")
                                 .font(.caption2)
                                 .foregroundColor(.appButtonGreen)
@@ -165,9 +187,11 @@ struct CrackedSwiftWidgetLiveActivity: Widget {
                     }
                 }
             } compactTrailing: {
-                // Compact trailing: Show timer
+                // Compact trailing: Show timer or "Ready!" (never timerInterval with past endDate)
                 Group {
-                    if context.state.isRunning {
+                    if Self.isReadyState(context) {
+                        Text("Ready!")
+                    } else if Self.canShowCountdown(context) {
                         Text(timerInterval: Date()...context.state.endDate, countsDown: true)
                     } else {
                         Text(Self.formatTime(context.state.timeRemaining))
@@ -304,5 +328,22 @@ struct CrackedSwiftWidgetLiveActivity: Widget {
     /// Whether the current egg is Piggybank (for fallback icon).
     private static func isPiggybank(_ eggName: String) -> Bool {
         eggName.lowercased() == "piggybank"
+    }
+
+    /// When timer has reached 0:00, show "ready to hatch" or "ready to empty" instead of countdown.
+    private static func isReadyState(_ context: ActivityViewContext<TimerAttributes>) -> Bool {
+        context.state.timeRemaining <= 0 && !context.state.isRunning
+    }
+
+    /// Safe to use Text(timerInterval:) only when endDate is in the future; past endDate can crash the widget.
+    private static func canShowCountdown(_ context: ActivityViewContext<TimerAttributes>) -> Bool {
+        context.state.isRunning && context.state.endDate.timeIntervalSinceNow > 0
+    }
+
+    private static func readyTitle(_ context: ActivityViewContext<TimerAttributes>) -> String {
+        if Self.isPiggybank(context.attributes.eggName) {
+            return "Piggybank is ready to empty"
+        }
+        return "Egg is ready to hatch"
     }
 }

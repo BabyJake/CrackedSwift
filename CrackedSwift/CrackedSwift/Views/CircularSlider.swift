@@ -18,7 +18,7 @@ struct CircularSlider: View {
     // Current egg image name
     var currentEggImageName: String = "FarmEgg"
     
-    // Time options in 5-minute intervals
+    // Time options: 5–120 minutes in 5-minute steps
     let minMinutes: Int = 5
     let maxMinutes: Int = 120
     let stepMinutes: Int = 5
@@ -221,7 +221,7 @@ struct CircularSlider: View {
         let totalRange = Double(maxMinutes - minMinutes)
         let rawMinutes = Double(minMinutes) + (progress * totalRange)
         
-        // Round to nearest 5-minute step
+        // Round to nearest step
         let roundedMinutes = Int(round(rawMinutes / Double(stepMinutes))) * stepMinutes
         let clampedMinutes = max(minMinutes, min(maxMinutes, roundedMinutes))
         
@@ -238,7 +238,7 @@ struct CircularSlider: View {
     }
     
     private func snapToNearestStep() {
-        // Ensure we're on a 5-minute step
+        // Ensure we're on a step
         let rounded = ((selectedMinutes + stepMinutes / 2) / stepMinutes) * stepMinutes
         selectedMinutes = max(minMinutes, min(maxMinutes, rounded))
         updateAngleFromMinutes()

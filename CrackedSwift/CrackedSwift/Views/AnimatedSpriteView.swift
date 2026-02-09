@@ -8,21 +8,60 @@
 import SwiftUI
 import Combine
 
-// Timer manager class to handle animation updates
+// MARK: - Pre-loaded frame cache (avoids UIImage(named:) on every tick)
+
+/// Shared cache that holds pre-loaded animation frames for each animal.
+/// Images are loaded once on first access and reused across all instances.
+final class AnimationFrameCache {
+    static let shared = AnimationFrameCache()
+
+    private var cache: [String: [UIImage]] = [:]
+    private let lock = NSLock()
+
+    private init() {}
+
+    /// Returns cached frames for the given key, or loads them if not cached yet.
+    func frames(for key: String, loader: () -> [UIImage]) -> [UIImage] {
+        lock.lock()
+        if let existing = cache[key] {
+            lock.unlock()
+            return existing
+        }
+        lock.unlock()
+
+        let loaded = loader()
+
+        lock.lock()
+        cache[key] = loaded
+        lock.unlock()
+        return loaded
+    }
+
+    /// Remove all cached frames (e.g. on memory warning).
+    func purge() {
+        lock.lock()
+        cache.removeAll()
+        lock.unlock()
+    }
+}
+
+// MARK: - Animation Timer
+
+/// Timer that drives frame animation. Publishes only the frame index.
 class AnimationTimer: ObservableObject {
     @Published var currentFrame: Int
     private var timer: Timer?
     private let frameCount: Int
     private let startFrame: Int
     private let frameDuration: Double
-    
+
     init(frameCount: Int, startFrame: Int, frameDuration: Double) {
         self.frameCount = frameCount
         self.startFrame = startFrame
         self.frameDuration = frameDuration
         self.currentFrame = startFrame
     }
-    
+
     func start() {
         stop()
         timer = Timer.scheduledTimer(withTimeInterval: frameDuration, repeats: true) { [weak self] _ in
@@ -32,29 +71,38 @@ class AnimationTimer: ObservableObject {
             }
         }
     }
-    
+
     func stop() {
         timer?.invalidate()
         timer = nil
     }
+
+    deinit {
+        timer?.invalidate()
+    }
 }
 
+// MARK: - AnimatedSpriteView
+
 struct AnimatedSpriteView: View {
-    let baseName: String  // e.g., "Cat"
-    let animationName: String  // e.g., "Idle", "Walk" (optional)
+    let baseName: String
+    let animationName: String
     let frameCount: Int
     let frameDuration: Double
     let startFrame: Int
-    let frameFormat: FrameFormat  // Format of frame naming
-    
+    let frameFormat: FrameFormat
+
     @StateObject private var timerManager: AnimationTimer
-    
+
+    /// Pre-loaded frames for this animal (populated in onAppear).
+    @State private var frames: [UIImage] = []
+
     enum FrameFormat {
         case underscoreWithAnimation  // Cat_Idle_1
         case underscoreSimple         // Cat_1
-        case paddedNumber              // cat0001, Cat0001
+        case paddedNumber             // cat0001, Cat0001
     }
-    
+
     init(
         baseName: String,
         animationName: String = "Idle",
@@ -71,106 +119,85 @@ struct AnimatedSpriteView: View {
         self.frameFormat = frameFormat
         _timerManager = StateObject(wrappedValue: AnimationTimer(frameCount: frameCount, startFrame: startFrame, frameDuration: frameDuration))
     }
-    
-    private func getImageName(for frame: Int) -> String {
-        switch frameFormat {
-        case .underscoreWithAnimation:
-            return "\(baseName)_\(animationName)_\(frame)"
-        case .underscoreSimple:
-            return "\(baseName)_\(frame)"
-        case .paddedNumber:
-            // Format: cat0001, cat0002, etc. (4 digits with leading zeros)
-            let paddedFrame = String(format: "%04d", frame)
-            // Try lowercase first, then capitalized
-            let lowercaseName = baseName.lowercased()
-            let capitalizedName = baseName.capitalized
-            return "\(lowercaseName)\(paddedFrame)" // Primary: cat0001
-        }
-    }
-    
+
     var body: some View {
         imageView
             .clipped()
             .background(Color.clear)
             .onAppear {
-                print("🎬 [AnimatedSpriteView] Animation appearing - baseName: '\(baseName)', frameCount: \(frameCount), format: \(frameFormat), startFrame: \(startFrame)")
+                loadFrames()
                 startAnimation()
             }
             .onDisappear {
-                stopAnimation()
+                timerManager.stop()
             }
     }
-    
+
+    // MARK: - Image rendering (no UIImage(named:) calls here — uses pre-loaded array)
+
     @ViewBuilder
     private var imageView: some View {
-        let imageName = getImageName(for: timerManager.currentFrame)
-        
-        // DEBUG: Print what we're looking for
-        let _ = print("🔍 [AnimatedSpriteView] Looking for image: '\(imageName)', currentFrame: \(timerManager.currentFrame), frameCount: \(frameCount), format: \(frameFormat)")
-        
-        // Try the detected format
-        if let image = UIImage(named: imageName) {
-            let _ = print("✅ [AnimatedSpriteView] Found image: '\(imageName)'")
-            Image(uiImage: image)
+        let frameIndex = timerManager.currentFrame - startFrame
+        if !frames.isEmpty, frameIndex >= 0, frameIndex < frames.count {
+            Image(uiImage: frames[frameIndex])
                 .resizable()
                 .scaledToFit()
-        }
-        // For padded format, also try capitalized version
-        else if frameFormat == .paddedNumber {
-            paddedNumberImageView(imageName: imageName)
-        }
-        // Fallback: Try just base name (static image)
-        else if let image = UIImage(named: baseName) {
-            Image(uiImage: image)
+        } else if let fallback = UIImage(named: baseName) {
+            // Static fallback while frames load or if no animation
+            Image(uiImage: fallback)
                 .resizable()
                 .scaledToFit()
-        }
-        // Final fallback
-        else {
+        } else {
             Image(systemName: "pawprint.fill")
                 .font(.system(size: 30))
                 .foregroundColor(.white.opacity(0.5))
         }
     }
-    
-    @ViewBuilder
-    private func paddedNumberImageView(imageName: String) -> some View {
-        let capitalizedName = baseName.capitalized
-        let paddedFrame = String(format: "%04d", timerManager.currentFrame)
-        let capitalizedImageName = "\(capitalizedName)\(paddedFrame)"
-        let _ = print("🔄 [AnimatedSpriteView] Trying capitalized: '\(capitalizedImageName)'")
-        
-        if let image = UIImage(named: capitalizedImageName) {
-            let _ = print("✅ [AnimatedSpriteView] Found capitalized image: '\(capitalizedImageName)'")
-            Image(uiImage: image)
-                .resizable()
-                .scaledToFit()
-        } else if let image = UIImage(named: baseName) {
-            let _ = print("⚠️ [AnimatedSpriteView] Using fallback base name: '\(baseName)'")
-            Image(uiImage: image)
-                .resizable()
-                .scaledToFit()
-        } else {
-            let _ = print("❌ [AnimatedSpriteView] No image found, using placeholder")
-            Image(systemName: "pawprint.fill")
-                .font(.system(size: 30))
-                .foregroundColor(.white.opacity(0))
+
+    // MARK: - Frame loading
+
+    private func loadFrames() {
+        let cacheKey = "\(baseName)_\(animationName)_\(frameFormat)"
+        frames = AnimationFrameCache.shared.frames(for: cacheKey) {
+            var loaded: [UIImage] = []
+            for i in startFrame ..< (startFrame + frameCount) {
+                if let img = loadSingleFrame(i) {
+                    loaded.append(img)
+                }
+            }
+            return loaded
         }
     }
-    
+
+    private func loadSingleFrame(_ frame: Int) -> UIImage? {
+        let names = imageNameCandidates(for: frame)
+        for name in names {
+            if let img = UIImage(named: name) {
+                return img
+            }
+        }
+        return nil
+    }
+
+    /// Returns candidate image names to try for a given frame number (most likely first).
+    private func imageNameCandidates(for frame: Int) -> [String] {
+        switch frameFormat {
+        case .underscoreWithAnimation:
+            return ["\(baseName)_\(animationName)_\(frame)"]
+        case .underscoreSimple:
+            return ["\(baseName)_\(frame)"]
+        case .paddedNumber:
+            let padded = String(format: "%04d", frame)
+            return [
+                "\(baseName.lowercased())\(padded)",
+                "\(baseName.capitalized)\(padded)"
+            ]
+        }
+    }
+
     private func startAnimation() {
-        // Only animate if we have multiple frames
-        guard frameCount > 1 else {
-            print("⚠️ [AnimatedSpriteView] Not starting animation - only \(frameCount) frames (need > 1)")
-            return
-        }
-        
-        print("▶️ [AnimatedSpriteView] Starting animation with \(frameCount) frames, duration: \(frameDuration)s per frame")
+        guard frameCount > 1 else { return }
         timerManager.start()
-    }
-    
-    private func stopAnimation() {
-        timerManager.stop()
     }
 }
 
@@ -182,7 +209,7 @@ struct AnimalAnimationConfig {
     let frameDuration: Double
     let startFrame: Int
     let frameFormat: AnimatedSpriteView.FrameFormat
-    
+
     static let defaultIdle = AnimalAnimationConfig(
         animationName: "Idle",
         frameCount: 4,
@@ -195,145 +222,104 @@ struct AnimalAnimationConfig {
 // MARK: - Helper to detect animation frames
 
 struct AnimationFrameDetector {
+
+    // MARK: - Result cache (detection is expensive — only do it once per animal)
+
+    private static var configCache: [String: AnimalAnimationConfig?] = [:]
+    private static let cacheLock = NSLock()
+
     /// Checks if an animal has animation frames available
     static func hasAnimationFrames(for animalName: String, animationName: String = "Idle") -> Bool {
-        // Check if first frame exists in any format
         return UIImage(named: "\(animalName)_\(animationName)_1") != nil ||
                UIImage(named: "\(animalName)_1") != nil ||
                UIImage(named: "\(animalName.lowercased())0001") != nil ||
                UIImage(named: "\(animalName.capitalized)0001") != nil
     }
-    
+
     /// Detects which frame format is being used
     static func detectFrameFormat(for animalName: String, animationName: String = "Idle") -> AnimatedSpriteView.FrameFormat {
-        print("🔍 [FrameDetector] Detecting format for: '\(animalName)'")
-        
-        // Check format: AnimalName_AnimationName_FrameNumber (e.g., "Cat_Idle_1")
-        let format1 = "\(animalName)_\(animationName)_1"
-        if UIImage(named: format1) != nil {
-            print("  ✅ Detected format: underscoreWithAnimation ('\(format1)')")
+        if UIImage(named: "\(animalName)_\(animationName)_1") != nil {
             return .underscoreWithAnimation
         }
-        
-        // Check format: AnimalName_FrameNumber (e.g., "Cat_1")
-        let format2 = "\(animalName)_1"
-        if UIImage(named: format2) != nil {
-            print("  ✅ Detected format: underscoreSimple ('\(format2)')")
+        if UIImage(named: "\(animalName)_1") != nil {
             return .underscoreSimple
         }
-        
-        // Check format: animalname0001 (e.g., "cat0001")
-        let lowercaseFormat = "\(animalName.lowercased())0001"
-        let capitalizedFormat = "\(animalName.capitalized)0001"
-        let lowercaseExists = UIImage(named: lowercaseFormat) != nil
-        let capitalizedExists = UIImage(named: capitalizedFormat) != nil
-        
-        print("  🔍 Checking lowercase: '\(lowercaseFormat)' → \(lowercaseExists)")
-        print("  🔍 Checking capitalized: '\(capitalizedFormat)' → \(capitalizedExists)")
-        
-        if lowercaseExists || capitalizedExists {
-            print("  ✅ Detected format: paddedNumber")
+        if UIImage(named: "\(animalName.lowercased())0001") != nil ||
+           UIImage(named: "\(animalName.capitalized)0001") != nil {
             return .paddedNumber
         }
-        
-        // Default
-        print("  ⚠️ No format detected, using default: underscoreWithAnimation")
         return .underscoreWithAnimation
     }
-    
+
     /// Counts how many animation frames are available
     static func countFrames(for animalName: String, animationName: String = "Idle") -> Int {
         var count = 0
         var frameNumber = 1
-        
-        print("🔢 [FrameDetector] Counting frames for: '\(animalName)'")
-        
+
         // Try format: AnimalName_AnimationName_FrameNumber
         while UIImage(named: "\(animalName)_\(animationName)_\(frameNumber)") != nil {
             count += 1
             frameNumber += 1
         }
-        if count > 0 {
-            print("  ✅ Found \(count) frames in format: '\(animalName)_\(animationName)_X'")
-            return count
-        }
-        
-        // If no frames found, try format: AnimalName_FrameNumber
+        if count > 0 { return count }
+
+        // Try format: AnimalName_FrameNumber
         frameNumber = 1
         while UIImage(named: "\(animalName)_\(frameNumber)") != nil {
             count += 1
             frameNumber += 1
         }
-        if count > 0 {
-            print("  ✅ Found \(count) frames in format: '\(animalName)_X'")
-            return count
-        }
-        
-        // If still no frames, try format: animalname0001, animalname0002, etc.
+        if count > 0 { return count }
+
+        // Try format: animalname0001
         frameNumber = 1
         let lowercaseName = animalName.lowercased()
-        let capitalizedName = animalName.capitalized
-        
-        print("  🔍 Trying lowercase format: '\(lowercaseName)XXXX'")
-        // Try lowercase first (cat0001)
         while UIImage(named: String(format: "%@%04d", lowercaseName, frameNumber)) != nil {
             count += 1
             frameNumber += 1
         }
-        
-        if count > 0 {
-            print("  ✅ Found \(count) frames in lowercase format: '\(lowercaseName)XXXX'")
-            return count
-        }
-        
-        // If no lowercase, try capitalized (Cat0001)
-        print("  🔍 Trying capitalized format: '\(capitalizedName)XXXX'")
+        if count > 0 { return count }
+
+        // Try capitalized: Cat0001
+        let capitalizedName = animalName.capitalized
         frameNumber = 1
         while UIImage(named: String(format: "%@%04d", capitalizedName, frameNumber)) != nil {
             count += 1
             frameNumber += 1
         }
-        
-        if count > 0 {
-            print("  ✅ Found \(count) frames in capitalized format: '\(capitalizedName)XXXX'")
-        } else {
-            print("  ❌ No frames found in any format")
-        }
-        
         return count
     }
-    
-    /// Gets animation config for an animal
+
+    /// Gets animation config for an animal (cached — safe to call from view body).
     static func getAnimationConfig(for animalName: String, animationName: String = "Idle") -> AnimalAnimationConfig? {
-        print("🎯 [FrameDetector] Getting animation config for: '\(animalName)'")
-        
-        // Check what formats exist
-        let lowercaseCheck = UIImage(named: "\(animalName.lowercased())0001")
-        let capitalizedCheck = UIImage(named: "\(animalName.capitalized)0001")
-        print("  🧪 Test - lowercase '\(animalName.lowercased())0001' found: \(lowercaseCheck != nil)")
-        print("  🧪 Test - capitalized '\(animalName.capitalized)0001' found: \(capitalizedCheck != nil)")
-        
-        let frameCount = countFrames(for: animalName, animationName: animationName)
-        print("  📊 Frame count detected: \(frameCount)")
-        
-        guard frameCount > 1 else {
-            print("  ❌ [FrameDetector] Not enough frames (\(frameCount)), returning nil")
-            return nil
+        let key = "\(animalName)_\(animationName)"
+
+        cacheLock.lock()
+        if let cached = configCache[key] {
+            cacheLock.unlock()
+            return cached
         }
-        
-        let format = detectFrameFormat(for: animalName, animationName: animationName)
-        print("  ✅ [FrameDetector] Format detected: \(format)")
-        
-        let config = AnimalAnimationConfig(
-            animationName: animationName,
-            frameCount: frameCount,
-            frameDuration: 0.15, // Default 150ms per frame
-            startFrame: 1,
-            frameFormat: format
-        )
-        
-        print("  ✅ [FrameDetector] Returning config with \(frameCount) frames")
-        return config
+        cacheLock.unlock()
+
+        // Compute (only happens once per animal)
+        let frameCount = countFrames(for: animalName, animationName: animationName)
+        let result: AnimalAnimationConfig?
+        if frameCount > 1 {
+            let format = detectFrameFormat(for: animalName, animationName: animationName)
+            result = AnimalAnimationConfig(
+                animationName: animationName,
+                frameCount: frameCount,
+                frameDuration: 0.15,
+                startFrame: 1,
+                frameFormat: format
+            )
+        } else {
+            result = nil
+        }
+
+        cacheLock.lock()
+        configCache[key] = result
+        cacheLock.unlock()
+        return result
     }
 }
-

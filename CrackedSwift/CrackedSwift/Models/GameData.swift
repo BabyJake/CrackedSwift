@@ -28,6 +28,7 @@ struct GameData: Codable {
     var savedActiveEggTitle: String? = nil
     var savedIsPiggybankMode: Bool = false
     var savedBackgroundTime: Date? = nil // When app went to background (for phone sleep)
+    var savedInitialTimerDuration: TimeInterval = 0 // Original timer duration for coin calculation
     
     // Break tracking
     var lastBreakTime: Date? = nil

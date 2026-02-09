@@ -28,7 +28,7 @@ struct MenuView: View {
     @State private var showingStreakRewards = false
     @State private var showingPiggybankShatteredAlert = false
     @State private var showingPiggybankResult = false
-    @State private var showingLeaveAppSelection = false
+    @State private var showingSettings = false
     
     // Computed property to get current egg image name
     private var currentEggImageName: String {
@@ -50,7 +50,7 @@ struct MenuView: View {
                 .ignoresSafeArea()
             
             VStack(spacing: 0) {
-                // Top bar with streak and coins
+                // Top bar with streak, coins, and settings
                 HStack {
                     // Streak indicator (top-left) - clickable
                     Button(action: {
@@ -86,21 +86,37 @@ struct MenuView: View {
                     
                     Spacer()
                     
-                    // Coin counter (top-right)
-                    HStack(spacing: 8) {
-                        Text("Coins: \(gameData.getTotalCoins())")
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundColor(.white)
+                    // Coin counter and settings button (top-right)
+                    HStack(spacing: 16) {
+                        HStack(spacing: 8) {
+                            Text("Coins: \(gameData.getTotalCoins())")
+                                .font(.system(size: 16, weight: .medium))
+                                .foregroundColor(.white)
+                            
+                            // Coin icon placeholder
+                            Image(systemName: "circle.fill")
+                                .foregroundColor(AppColors.coinGold)
+                                .overlay(
+                                    Image(systemName: "pawprint.fill")
+                                        .foregroundColor(AppColors.coinBrown)
+                                        .font(.system(size: 12))
+                                )
+                                .frame(width: 24, height: 24)
+                        }
                         
-                        // Coin icon placeholder
-                        Image(systemName: "circle.fill")
-                            .foregroundColor(AppColors.coinGold)
-                            .overlay(
-                                Image(systemName: "pawprint.fill")
-                                    .foregroundColor(AppColors.coinBrown)
-                                    .font(.system(size: 12))
-                            )
-                            .frame(width: 24, height: 24)
+                        // Settings button
+                        Button(action: {
+                            showingSettings = true
+                        }) {
+                            Image(systemName: "gearshape.fill")
+                                .foregroundColor(.white)
+                                .font(.system(size: 20))
+                                .padding(8)
+                                .background(
+                                    Circle()
+                                        .fill(Color.black.opacity(0.3))
+                                )
+                        }
                     }
                 }
                 .padding(.horizontal, 20)
@@ -186,17 +202,6 @@ struct MenuView: View {
                             .font(.subheadline)
                             .foregroundColor(.white)
                         }
-                        // Screen Time: apps that count as "leaving" (lock screen does not crack)
-                        Button(action: {
-                            showingLeaveAppSelection = true
-                        }) {
-                            HStack {
-                                Image(systemName: "app.badge")
-                                Text(ScreenTimeManager.shared.hasSelectedApps ? "Apps that count as leaving (set)" : "Set apps that count as leaving")
-                            }
-                            .font(.subheadline)
-                            .foregroundColor(.white.opacity(0.9))
-                        }
                     }
                 }
                 .padding(.bottom, 100)
@@ -265,8 +270,8 @@ struct MenuView: View {
             .sheet(isPresented: $showingStreakRewards) {
                 StreakRewardsView()
             }
-            .sheet(isPresented: $showingLeaveAppSelection) {
-                LeaveAppSelectionView(isPresented: $showingLeaveAppSelection)
+            .sheet(isPresented: $showingSettings) {
+                SettingsView()
             }
         }
     }
@@ -459,13 +464,7 @@ struct EggSelectionView: View {
             }
         }
         .onAppear {
-            // Debug: Print available eggs
-            let purchasedEggs = gameData.getPurchasedEggs()
-            print("DEBUG: Purchased eggs: \(purchasedEggs)")
-            print("DEBUG: Available eggs count: \(availableEggs.count)")
-            for eggData in availableEggs {
-                print("DEBUG: Egg '\(eggData.egg.title)' quantity: \(eggData.quantity)")
-            }
+            // Egg selection appeared — no-op (debug prints removed to reduce memory churn)
         }
     }
 }

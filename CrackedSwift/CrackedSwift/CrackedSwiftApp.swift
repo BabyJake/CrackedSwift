@@ -12,19 +12,27 @@ struct CrackedSwiftApp: App {
     // Initialize managers early
     @StateObject private var gameData = GameDataManager.shared
     
-    init() {
-        // Request permissions first, then show streak alert
-        Task { @MainActor in
-            await ScreenTimeManager.shared.requestAuthorization()
-            GameDataManager.shared.checkAndUpdateStreak()
-        }
-    }
-    
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            RootView()
                 .environmentObject(gameData)
                 .background(ScenePhaseHandler())
+        }
+    }
+}
+
+/// Shows main app only after Screen Time setup is complete; otherwise shows blocking setup screen.
+struct RootView: View {
+    @EnvironmentObject var gameData: GameDataManager
+    @ObservedObject private var screenTime = ScreenTimeManager.shared
+    
+    var body: some View {
+        Group {
+            if screenTime.hasCompletedSetup {
+                ContentView()
+            } else {
+                ScreenTimeRequiredView()
+            }
         }
     }
 }
@@ -54,10 +62,6 @@ struct ScenePhaseHandler: View {
                         // App came back to foreground
                         if oldPhase == .inactive || oldPhase == .background {
                             TimerManager.shared.handleAppForegrounded()
-                        }
-                        // Only show streak after the initial permission flow is finished
-                        if ScreenTimeManager.shared.didFinishAuthorizationRequest {
-                            GameDataManager.shared.checkAndUpdateStreak()
                         }
                     @unknown default:
                         break

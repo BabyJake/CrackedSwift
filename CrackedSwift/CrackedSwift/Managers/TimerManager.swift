@@ -45,6 +45,14 @@ class TimerManager: ObservableObject {
     // Track when app went to background for calculating elapsed time (phone sleep)
     private var backgroundStartTime: Date?
     
+    // MARK: - Lock Detection (Flora-style: distinguish lock from intentional leave)
+    
+    /// Whether the device was locked while the app was in the background.
+    /// Set by `protectedDataWillBecomeUnavailable` notification; persisted to UserDefaults
+    /// so it survives app termination.
+    private var deviceWasLocked: Bool = false
+    private var lockObserver: NSObjectProtocol?
+    
     // Break constants
     private let breakDuration: TimeInterval = 10 * 60 // 10 minutes
     private let breakCooldown: TimeInterval = 60 * 60 // 1 hour between breaks
@@ -94,8 +102,8 @@ class TimerManager: ObservableObject {
             return false
         }
         
-        // Save state
-        dataManager.saveTimerState(timeRemaining: timeRemaining, wasRunning: true, sessionStartTime: sessionStartTime, activeEggTitle: activeEggTitle, isPiggybankMode: isPiggybankMode)
+        // Save state (include initialTimerDuration for coin calculation on restore)
+        dataManager.saveTimerState(timeRemaining: timeRemaining, wasRunning: true, sessionStartTime: sessionStartTime, activeEggTitle: activeEggTitle, isPiggybankMode: isPiggybankMode, initialTimerDuration: initialTimerDuration)
 
         // Start Live Activity (Lock Screen / Dynamic Island)
         let eggImageName: String = {
@@ -111,6 +119,8 @@ class TimerManager: ObservableObject {
         startTimerTick()
         // Start Screen Time–based leave-app detection so we only crack when user uses another app, not on lock
         ScreenTimeManager.shared.startFocusMonitoring(timerDurationSeconds: duration)
+        // Start lock detection so we can distinguish lock-screen from intentional leave
+        startLockDetection()
         return true
     }
     
@@ -135,6 +145,7 @@ class TimerManager: ObservableObject {
     }
     
     func stopTimer() {
+        crackEggTask?.cancel()
         isTimerRunning = false
         stopTimerTick()
         LiveActivityManager.shared.endLiveActivity()
@@ -153,6 +164,7 @@ class TimerManager: ObservableObject {
         
         dataManager.clearTimerState()
         ScreenTimeManager.shared.stopFocusMonitoring()
+        stopLockDetection()
     }
     
     func resetTimer() {
@@ -183,8 +195,14 @@ class TimerManager: ObservableObject {
     }
     
     private func timerCompleted() {
+        crackEggTask?.cancel()
         isTimerRunning = false
         stopTimerTick()
+        
+        // Clear background tracking immediately to prevent false crack detection
+        backgroundStartTime = nil
+        
+        // End Live Activity immediately to avoid widget crash (timerInterval with past endDate can crash)
         LiveActivityManager.shared.endLiveActivity()
         
         // Calculate actual study duration from session start time
@@ -205,11 +223,19 @@ class TimerManager: ObservableObject {
         // Pass the actual study duration for rarity boost calculation
         onTimerComplete?(actualStudyDuration)
         
+        // Update daily streak silently — don't show streak alert while result sheet is presenting
+        dataManager.checkAndUpdateStreak(silent: true)
+        
+        // Clear all state to prevent false crack detection on foreground
         activeEggTitle = nil
         isPiggybankMode = false
         initialTimerDuration = 0
+        sessionStartTime = nil
         dataManager.clearTimerState()
         ScreenTimeManager.shared.stopFocusMonitoring()
+        stopLockDetection()
+        
+        print("[CrackedSwift] ✅ Timer completed successfully - all state cleared")
     }
     
     // MARK: - Coins
@@ -274,6 +300,7 @@ class TimerManager: ObservableObject {
             timeRemaining = state.timeRemaining
             activeEggTitle = state.activeEggTitle
             isPiggybankMode = state.isPiggybankMode
+            initialTimerDuration = state.initialTimerDuration
             
             // Adjust for time passed
             if let startTime = state.sessionStartTime {
@@ -291,6 +318,12 @@ class TimerManager: ObservableObject {
                     backgroundStartTime = state.backgroundTime
                     // Don't auto-resume - let handleAppForegrounded handle it
                     isTimerRunning = false
+                    
+                    // Restore lock detection for the active session.
+                    // Re-register the notification observer and read the persisted lock flag
+                    // (the notification may have fired before the app was terminated).
+                    startLockDetection()
+                    deviceWasLocked = UserDefaults.standard.bool(forKey: FocusSessionConstants.deviceWasLockedKey)
                 } else {
                     // Timer expired while app was closed - complete it
                     timeRemaining = 0
@@ -300,6 +333,10 @@ class TimerManager: ObservableObject {
                     timerCompleted()
                 }
             }
+        } else {
+            // No active timer session to restore — clean up any orphaned Live Activities
+            // from a previous app process that were never properly ended.
+            LiveActivityManager.shared.endAllActivities()
         }
     }
     
@@ -346,6 +383,12 @@ class TimerManager: ObservableObject {
         isOnBreak = false
         breakTimeRemaining = 0
         dataManager.endBreak()
+        
+        // Restart Screen Time monitoring with remaining time so the schedule covers
+        // the rest of the session (the old schedule kept ticking during the break).
+        if timeRemaining > 0 {
+            ScreenTimeManager.shared.startFocusMonitoring(timerDurationSeconds: timeRemaining)
+        }
         
         // Resume main timer
         resumeTimer()
@@ -414,21 +457,62 @@ class TimerManager: ObservableObject {
         return String(format: "%02d:%02d", minutes, seconds)
     }
     
+    // MARK: - Lock Detection
+    
+    /// Start listening for device-lock notifications (protected data becomes unavailable when
+    /// the device locks with a passcode/biometric). Called when a focus session begins.
+    private func startLockDetection() {
+        stopLockDetection()
+        
+        deviceWasLocked = false
+        UserDefaults.standard.set(false, forKey: FocusSessionConstants.deviceWasLockedKey)
+        
+        lockObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.protectedDataWillBecomeUnavailableNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self = self, self.activeEggTitle != nil else { return }
+                self.deviceWasLocked = true
+                UserDefaults.standard.set(true, forKey: FocusSessionConstants.deviceWasLockedKey)
+                print("[CrackedSwift] 🔒 Device lock detected (protected data becoming unavailable)")
+            }
+        }
+    }
+    
+    /// Stop listening for device-lock notifications. Called when a session ends.
+    private func stopLockDetection() {
+        if let observer = lockObserver {
+            NotificationCenter.default.removeObserver(observer)
+            lockObserver = nil
+        }
+        deviceWasLocked = false
+        UserDefaults.standard.removeObject(forKey: FocusSessionConstants.deviceWasLockedKey)
+    }
+    
     // MARK: - Background Handling
     
     func handleAppBecomingInactive() {
-        // No-op. Screen Time (Device Activity) sets violation when user uses a monitored app.
+        // No-op. Scene-phase–based detection happens in handleAppBackgrounded / handleAppForegrounded.
     }
     
     func handleAppBackgrounded() {
-        // Never crack here. Screen Time extension sets a violation flag when user uses another app;
-        // we crack only when returning and seeing that flag.
         if isOnBreak { return }
-        guard isTimerRunning else { return }
+        // Use activeEggTitle instead of isTimerRunning — after app restore
+        // isTimerRunning is false but the session is still active.
+        guard activeEggTitle != nil else { return }
         
         let bgTime = Date()
         backgroundStartTime = bgTime
-        print("[CrackedSwift] ⏸️ SLEEP/BACKGROUND: App went to background (timer paused; crack only if Screen Time violation)")
+        
+        // Reset lock detection for this background cycle.
+        // The protectedDataWillBecomeUnavailable notification will set it to true
+        // if the device locks while we're backgrounded.
+        deviceWasLocked = false
+        UserDefaults.standard.set(false, forKey: FocusSessionConstants.deviceWasLockedKey)
+        
+        print("[CrackedSwift] ⏸️ BACKGROUND: App went to background (will detect lock vs. intentional leave on return)")
         dataManager.saveTimerState(timeRemaining: timeRemaining, wasRunning: true, sessionStartTime: sessionStartTime, activeEggTitle: activeEggTitle, isPiggybankMode: isPiggybankMode, backgroundTime: bgTime)
         stopTimerTick()
     }
@@ -437,7 +521,15 @@ class TimerManager: ObservableObject {
         let appState = UIApplication.shared.applicationState
         guard appState == .active else { return }
         
-        // Check if break expired while app was backgrounded
+        // ── 1. No active session → nothing to do ──
+        if activeEggTitle == nil && timeRemaining == 0 {
+            ScreenTimeManager.shared.checkAndClearViolation() // Clear any stale flags
+            backgroundStartTime = nil
+            print("[CrackedSwift] 🟢 Foreground: No active session, ignoring foreground checks")
+            return
+        }
+        
+        // ── 2. Handle break expiry while backgrounded ──
         if isOnBreak {
             if let breakState = dataManager.restoreBreakState() {
                 if breakState.timeRemaining <= 0 {
@@ -449,10 +541,30 @@ class TimerManager: ObservableObject {
             }
         }
         
-        // Only crack if: (1) timer was running, (2) we actually went to background, (3) Screen Time violation is set
-        let hadViolation = ScreenTimeManager.shared.checkAndClearViolation()
-        if isTimerRunning, backgroundStartTime != nil, hadViolation {
-            print("[CrackedSwift] 🔴 Foreground: LEFT APP (Screen Time violation while in background) → cracking/shattering")
+        // Must have an active session to proceed with crack/resume logic
+        guard activeEggTitle != nil else {
+            backgroundStartTime = nil
+            return
+        }
+        
+        // ── 3. Skip violation check if we never went to background ──
+        // If backgroundStartTime is nil, the app went inactive→active (e.g. notification
+        // center, Control Center, Siri). Do NOT consume the violation flag here — the
+        // Device Activity event fires only once per schedule, so clearing the flag without
+        // cracking would waste the one-time trigger and leave the session unprotected.
+        guard backgroundStartTime != nil else {
+            print("[CrackedSwift] 🟢 Foreground: inactive→active transition (no background), skipping violation check")
+            return
+        }
+        
+        // ── 4. Screen Time violation check (primary detection — user used a monitored app) ──
+        let hadViolation = ScreenTimeManager.shared.checkAndClearViolation(since: backgroundStartTime)
+        
+        // Crack immediately if Screen Time confirms user used a monitored app.
+        // NOTE: removed isTimerRunning guard — after app restore isTimerRunning is false
+        // but the session is still active (activeEggTitle != nil).
+        if hadViolation {
+            print("[CrackedSwift] 🔴 Foreground: LEFT APP (Screen Time violation) → cracking/shattering")
             if isPiggybankMode {
                 shatterPiggybankDueToAppSwitch()
             } else if let eggTitle = activeEggTitle {
@@ -461,19 +573,51 @@ class TimerManager: ObservableObject {
             backgroundStartTime = nil
             return
         }
-        if hadViolation && backgroundStartTime == nil {
-            print("[CrackedSwift] ⚠️ Foreground: violation flag was set but we never went to background — ignoring (false positive)")
+        
+        // ── 5. Flora-style lock vs. intentional leave detection ──
+        // When the device LOCKS, iOS makes protected data unavailable — our notification
+        // observer sets `deviceWasLocked = true`. If the flag is still false, the user
+        // swiped to the home screen or switched to a non-monitored app without locking.
+        //
+        // Decision matrix:
+        //   Device locked          → phone sleep, safe to resume
+        //   NOT locked + < grace   → brief accidental leave, safe to resume
+        //   NOT locked + ≥ grace   → intentional leave, crack/shatter
+        let wasLocked = deviceWasLocked || UserDefaults.standard.bool(forKey: FocusSessionConstants.deviceWasLockedKey)
+        let timeInBackground = backgroundStartTime.map { Date().timeIntervalSince($0) } ?? 0
+        
+        if !wasLocked && timeInBackground >= FocusSessionConstants.homeScreenGracePeriodSeconds {
+            // Device was NOT locked and user was away beyond grace period → intentional leave
+            print("[CrackedSwift] 🔴 Foreground: device NOT locked, away for \(String(format: "%.1f", timeInBackground))s (≥ \(FocusSessionConstants.homeScreenGracePeriodSeconds)s grace) → cracking/shattering")
+            if isPiggybankMode {
+                shatterPiggybankDueToAppSwitch()
+            } else if let eggTitle = activeEggTitle {
+                crackEggDueToAppSwitch(eggTitle: eggTitle)
+            }
+            backgroundStartTime = nil
+            return
         }
         
-        // No violation: resume timer (subtract time spent in background)
-        if activeEggTitle != nil && timeRemaining > 0 && !isOnBreak,
-           let state = dataManager.restoreTimerState(), state.wasRunning,
-           let bgStartTime = backgroundStartTime {
-            let elapsed = Date().timeIntervalSince(bgStartTime)
-            print("[CrackedSwift] 🟢 Foreground: no violation → resuming timer, elapsed \(String(format: "%.1f", elapsed))s")
-            timeRemaining = max(0, timeRemaining - elapsed)
+        if !wasLocked {
+            print("[CrackedSwift] 🟡 Foreground: brief leave (\(String(format: "%.1f", timeInBackground))s < grace period) → resuming")
+        } else {
+            print("[CrackedSwift] 🟢 Foreground: device was locked → resuming (phone sleep)")
+        }
+        
+        // ── 6. Safe scenario → adjust timer for time in background and resume ──
+        let capturedBgStart = backgroundStartTime
+        
+        if timeRemaining > 0 && !isOnBreak {
+            if let bgStartTime = backgroundStartTime {
+                let elapsed = Date().timeIntervalSince(bgStartTime)
+                print("[CrackedSwift] 🟢 Foreground: resuming timer (was in background \(String(format: "%.1f", elapsed))s)")
+                timeRemaining = max(0, timeRemaining - elapsed)
+            }
+            
             if timeRemaining <= 0 {
                 timerCompleted()
+                backgroundStartTime = nil
+                return
             } else {
                 isTimerRunning = true
                 LiveActivityManager.shared.updateLiveActivity(timeRemaining: timeRemaining, isRunning: true)
@@ -483,6 +627,34 @@ class TimerManager: ObservableObject {
         }
         
         backgroundStartTime = nil
+        
+        // ── 7. Refresh Device Activity monitoring ──
+        // Re-start monitoring with the remaining time so the schedule and event are
+        // renewed. This guards against iOS silently killing the extension, schedule
+        // expiry from timer drift, and ensures the one-time event trigger is fresh.
+        if timeRemaining > 0 {
+            ScreenTimeManager.shared.startFocusMonitoring(timerDurationSeconds: timeRemaining)
+        }
+        
+        // ── 8. Delayed re-check: catch slow Device Activity extension ──
+        // The extension runs in a separate process and may not have set the
+        // violation flag by the time we checked above. Re-check after a delay.
+        crackEggTask?.cancel()
+        crackEggTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 3_000_000_000) // 3 seconds
+            guard !Task.isCancelled, let self = self else { return }
+            guard self.activeEggTitle != nil else { return } // Session already ended
+            
+            let delayedViolation = ScreenTimeManager.shared.checkAndClearViolation(since: capturedBgStart)
+            if delayedViolation {
+                print("[CrackedSwift] 🔴 Delayed re-check: Screen Time violation detected after 3s → cracking/shattering")
+                if self.isPiggybankMode {
+                    self.shatterPiggybankDueToAppSwitch()
+                } else if let eggTitle = self.activeEggTitle {
+                    self.crackEggDueToAppSwitch(eggTitle: eggTitle)
+                }
+            }
+        }
     }
     
     private func crackEggDueToAppSwitch(eggTitle: String) {
@@ -516,9 +688,11 @@ class TimerManager: ObservableObject {
         sessionStartTime = nil
         dataManager.clearTimerState()
         ScreenTimeManager.shared.stopFocusMonitoring()
+        stopLockDetection()
     }
     
     private func shatterPiggybankDueToAppSwitch() {
+        crackEggTask?.cancel()
         isTimerRunning = false
         stopTimerTick()
         LiveActivityManager.shared.endLiveActivity()
@@ -530,6 +704,7 @@ class TimerManager: ObservableObject {
         sessionStartTime = nil
         dataManager.clearTimerState()
         ScreenTimeManager.shared.stopFocusMonitoring()
+        stopLockDetection()
         onPiggybankShattered?()
         onSessionFailed?()
     }

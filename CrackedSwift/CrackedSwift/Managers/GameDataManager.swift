@@ -151,7 +151,7 @@ class GameDataManager: ObservableObject {
     
     // MARK: - Timer State
     
-    func saveTimerState(timeRemaining: TimeInterval, wasRunning: Bool, sessionStartTime: Date?, activeEggTitle: String?, isPiggybankMode: Bool, backgroundTime: Date? = nil) {
+    func saveTimerState(timeRemaining: TimeInterval, wasRunning: Bool, sessionStartTime: Date?, activeEggTitle: String?, isPiggybankMode: Bool, backgroundTime: Date? = nil, initialTimerDuration: TimeInterval? = nil) {
         gameData.savedTimeRemaining = timeRemaining
         // Only update session start time if it's a new session (nil means new session)
         if let startTime = sessionStartTime {
@@ -168,14 +168,18 @@ class GameDataManager: ObservableObject {
         if let bgTime = backgroundTime {
             gameData.savedBackgroundTime = bgTime
         }
+        // Save initial timer duration for coin calculation (only update when provided)
+        if let duration = initialTimerDuration {
+            gameData.savedInitialTimerDuration = duration
+        }
         saveGameData()
     }
     
-    func restoreTimerState() -> (timeRemaining: TimeInterval, sessionStartTime: Date?, wasRunning: Bool, activeEggTitle: String?, isPiggybankMode: Bool, backgroundTime: Date?)? {
+    func restoreTimerState() -> (timeRemaining: TimeInterval, sessionStartTime: Date?, wasRunning: Bool, activeEggTitle: String?, isPiggybankMode: Bool, backgroundTime: Date?, initialTimerDuration: TimeInterval)? {
         guard gameData.wasTimerRunning, let startTime = gameData.savedSessionStartTime else {
             return nil
         }
-        return (gameData.savedTimeRemaining, startTime, true, gameData.savedActiveEggTitle, gameData.savedIsPiggybankMode, gameData.savedBackgroundTime)
+        return (gameData.savedTimeRemaining, startTime, true, gameData.savedActiveEggTitle, gameData.savedIsPiggybankMode, gameData.savedBackgroundTime, gameData.savedInitialTimerDuration)
     }
     
     func clearTimerState() {
@@ -185,6 +189,7 @@ class GameDataManager: ObservableObject {
         gameData.savedActiveEggTitle = nil
         gameData.savedIsPiggybankMode = false
         gameData.savedBackgroundTime = nil
+        gameData.savedInitialTimerDuration = 0
         saveGameData()
     }
     
@@ -393,14 +398,15 @@ class GameDataManager: ObservableObject {
         saveGameData()
     }
     
-    // MARK: - Login Streak
+    // MARK: - Study Streak
     
-    /// Checks and updates the login streak. Publishes alert info if streak was updated.
-    func checkAndUpdateStreak() {
+    /// Checks and updates the daily study streak. Publishes alert info if streak was updated.
+    /// Pass `silent: true` to update streak data without showing an alert (e.g. when a result sheet is already presenting).
+    func checkAndUpdateStreak(silent: Bool = false) {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
         
-        // If no previous login, start streak at 1
+        // If no previous streak day, start streak at 1
         guard let lastLogin = gameData.lastLoginDate else {
             gameData.lastLoginDate = today
             gameData.currentStreak = 1
@@ -416,20 +422,24 @@ class GameDataManager: ObservableObject {
             }
             saveGameData()
             objectWillChange.send() // Trigger view update
-            streakAlertInfo = (show: true, streak: 1, reward: awardedCoins, message: "Welcome! Your login streak has begun! 🎉")
+            if !silent {
+                streakAlertInfo = (show: true, streak: 1, reward: awardedCoins, message: "Welcome! Your study streak has begun! 🎉")
+            }
             return
         }
         
         let lastLoginDay = calendar.startOfDay(for: lastLogin)
         let daysSinceLastLogin = calendar.dateComponents([.day], from: lastLoginDay, to: today).day ?? 0
         
-        // If already logged in today, don't update
+        // If already recorded a study session today, don't update
         if daysSinceLastLogin == 0 {
-            streakAlertInfo = nil
+            if !silent {
+                streakAlertInfo = nil
+            }
             return
         }
         
-        // If logged in yesterday, continue streak
+        // If last study session was yesterday, continue streak
         if daysSinceLastLogin == 1 {
             gameData.currentStreak += 1
             gameData.lastLoginDate = today
@@ -437,7 +447,9 @@ class GameDataManager: ObservableObject {
             addCoins(reward)
             saveGameData()
             objectWillChange.send() // Trigger view update
-            streakAlertInfo = (show: true, streak: gameData.currentStreak, reward: reward, message: "Day \(gameData.currentStreak) of your login streak! 🔥")
+            if !silent {
+                streakAlertInfo = (show: true, streak: gameData.currentStreak, reward: reward, message: "Day \(gameData.currentStreak) of your study streak! 🔥")
+            }
             return
         }
         
@@ -450,7 +462,9 @@ class GameDataManager: ObservableObject {
         addCoins(reward)
         saveGameData()
         objectWillChange.send() // Trigger view update
-        streakAlertInfo = (show: true, streak: 1, reward: reward, message: "Your streak was broken, but you're back! Starting fresh! 💪")
+        if !silent {
+            streakAlertInfo = (show: true, streak: 1, reward: reward, message: "Your streak was broken, but you're back! Starting fresh! 💪")
+        }
     }
     
     func dismissStreakAlert() {

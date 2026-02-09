@@ -273,9 +273,12 @@ struct AnimalInstanceView: View {
 }
 
 struct GrassTileView: View {
+    /// Load the grass image once and share across all tile instances.
+    private static let grassImage: UIImage? = UIImage(named: "grass")
+
     var body: some View {
         Group {
-            if let image = UIImage(named: "grass") {
+            if let image = Self.grassImage {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFill()
