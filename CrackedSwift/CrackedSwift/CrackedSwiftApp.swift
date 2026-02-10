@@ -22,18 +22,21 @@ struct CrackedSwiftApp: App {
 }
 
 /// Shows main app only after Screen Time setup is complete; otherwise shows blocking setup screen.
+/// Screen Time gate disabled — using Darwin lock detection instead (Flora-style).
 struct RootView: View {
     @EnvironmentObject var gameData: GameDataManager
-    @ObservedObject private var screenTime = ScreenTimeManager.shared
+    // @ObservedObject private var screenTime = ScreenTimeManager.shared
     
     var body: some View {
-        Group {
-            if screenTime.hasCompletedSetup {
-                ContentView()
-            } else {
-                ScreenTimeRequiredView()
-            }
-        }
+        ContentView()
+        // Screen Time setup gate commented out — no longer needed.
+        // Group {
+        //     if screenTime.hasCompletedSetup {
+        //         ContentView()
+        //     } else {
+        //         ScreenTimeRequiredView()
+        //     }
+        // }
     }
 }
 

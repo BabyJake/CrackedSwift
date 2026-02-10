@@ -28,7 +28,8 @@ struct MenuView: View {
     @State private var showingStreakRewards = false
     @State private var showingPiggybankShatteredAlert = false
     @State private var showingPiggybankResult = false
-    @State private var showingSettings = false
+    // Screen Time settings UI commented out — using Darwin lock detection instead.
+    // @State private var showingSettings = false
     
     // Computed property to get current egg image name
     private var currentEggImageName: String {
@@ -104,19 +105,19 @@ struct MenuView: View {
                                 .frame(width: 24, height: 24)
                         }
                         
-                        // Settings button
-                        Button(action: {
-                            showingSettings = true
-                        }) {
-                            Image(systemName: "gearshape.fill")
-                                .foregroundColor(.white)
-                                .font(.system(size: 20))
-                                .padding(8)
-                                .background(
-                                    Circle()
-                                        .fill(Color.black.opacity(0.3))
-                                )
-                        }
+                        // Settings button — commented out (Screen Time exclusions no longer used)
+                        // Button(action: {
+                        //     showingSettings = true
+                        // }) {
+                        //     Image(systemName: "gearshape.fill")
+                        //         .foregroundColor(.white)
+                        //         .font(.system(size: 20))
+                        //         .padding(8)
+                        //         .background(
+                        //             Circle()
+                        //                 .fill(Color.black.opacity(0.3))
+                        //         )
+                        // }
                     }
                 }
                 .padding(.horizontal, 20)
@@ -270,9 +271,10 @@ struct MenuView: View {
             .sheet(isPresented: $showingStreakRewards) {
                 StreakRewardsView()
             }
-            .sheet(isPresented: $showingSettings) {
-                SettingsView()
-            }
+            // Screen Time settings sheet commented out — no longer needed.
+            // .sheet(isPresented: $showingSettings) {
+            //     SettingsView()
+            // }
         }
     }
     

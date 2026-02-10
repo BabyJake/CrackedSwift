@@ -45,13 +45,17 @@ class TimerManager: ObservableObject {
     // Track when app went to background for calculating elapsed time (phone sleep)
     private var backgroundStartTime: Date?
     
-    // MARK: - Lock Detection (Flora-style: distinguish lock from intentional leave)
+    // MARK: - Flora-style Lock vs. Leave Detection
     
-    /// Whether the device was locked while the app was in the background.
-    /// Set by `protectedDataWillBecomeUnavailable` notification; persisted to UserDefaults
-    /// so it survives app termination.
-    private var deviceWasLocked: Bool = false
-    private var lockObserver: NSObjectProtocol?
+    /// Set to `true` by the 0.2 s delayed check in handleAppBackgrounded() when the device
+    /// was NOT locked (i.e. user intentionally left). Read by handleAppForegrounded().
+    private var appSwitchDetected: Bool = false
+    
+    /// Pending background work item for the 0.2 s delayed lock check.
+    private var backgroundCheckWorkItem: DispatchWorkItem?
+    
+    /// Background task identifier so iOS keeps us alive for the 0.2 s check.
+    private var bgTaskId: UIBackgroundTaskIdentifier = .invalid
     
     // Break constants
     private let breakDuration: TimeInterval = 10 * 60 // 10 minutes
@@ -117,10 +121,8 @@ class TimerManager: ObservableObject {
         )
         
         startTimerTick()
-        // Start Screen Time–based leave-app detection so we only crack when user uses another app, not on lock
-        ScreenTimeManager.shared.startFocusMonitoring(timerDurationSeconds: duration)
-        // Start lock detection so we can distinguish lock-screen from intentional leave
-        startLockDetection()
+        // Screen Time monitoring commented out — using Darwin lock detection instead (Flora-style).
+        // ScreenTimeManager.shared.startFocusMonitoring(timerDurationSeconds: duration)
         return true
     }
     
@@ -163,8 +165,7 @@ class TimerManager: ObservableObject {
         }
         
         dataManager.clearTimerState()
-        ScreenTimeManager.shared.stopFocusMonitoring()
-        stopLockDetection()
+        // ScreenTimeManager.shared.stopFocusMonitoring()
     }
     
     func resetTimer() {
@@ -232,8 +233,7 @@ class TimerManager: ObservableObject {
         initialTimerDuration = 0
         sessionStartTime = nil
         dataManager.clearTimerState()
-        ScreenTimeManager.shared.stopFocusMonitoring()
-        stopLockDetection()
+        // ScreenTimeManager.shared.stopFocusMonitoring()
         
         print("[CrackedSwift] ✅ Timer completed successfully - all state cleared")
     }
@@ -289,7 +289,7 @@ class TimerManager: ObservableObject {
         stopTimer()
         // stopTimer() already ends the Live Activity, but keep this explicit for safety
         LiveActivityManager.shared.endLiveActivity()
-        ScreenTimeManager.shared.stopFocusMonitoring()
+        // ScreenTimeManager.shared.stopFocusMonitoring()
         onSessionFailed?()
     }
     
@@ -319,11 +319,10 @@ class TimerManager: ObservableObject {
                     // Don't auto-resume - let handleAppForegrounded handle it
                     isTimerRunning = false
                     
-                    // Restore lock detection for the active session.
-                    // Re-register the notification observer and read the persisted lock flag
-                    // (the notification may have fired before the app was terminated).
-                    startLockDetection()
-                    deviceWasLocked = UserDefaults.standard.bool(forKey: FocusSessionConstants.deviceWasLockedKey)
+                    // LockDetectionManager is a singleton that registers on init;
+                    // no extra setup needed. The Darwin flag from before termination
+                    // is lost, but handleAppForegrounded() will still run and check
+                    // the live Darwin flag (covers the lock-then-relaunch case).
                 } else {
                     // Timer expired while app was closed - complete it
                     timeRemaining = 0
@@ -384,11 +383,10 @@ class TimerManager: ObservableObject {
         breakTimeRemaining = 0
         dataManager.endBreak()
         
-        // Restart Screen Time monitoring with remaining time so the schedule covers
-        // the rest of the session (the old schedule kept ticking during the break).
-        if timeRemaining > 0 {
-            ScreenTimeManager.shared.startFocusMonitoring(timerDurationSeconds: timeRemaining)
-        }
+        // Screen Time monitoring commented out — using Darwin lock detection instead.
+        // if timeRemaining > 0 {
+        //     ScreenTimeManager.shared.startFocusMonitoring(timerDurationSeconds: timeRemaining)
+        // }
         
         // Resume main timer
         resumeTimer()
@@ -457,44 +455,30 @@ class TimerManager: ObservableObject {
         return String(format: "%02d:%02d", minutes, seconds)
     }
     
-    // MARK: - Lock Detection
+    // MARK: - Background Task Helpers
     
-    /// Start listening for device-lock notifications (protected data becomes unavailable when
-    /// the device locks with a passcode/biometric). Called when a focus session begins.
-    private func startLockDetection() {
-        stopLockDetection()
-        
-        deviceWasLocked = false
-        UserDefaults.standard.set(false, forKey: FocusSessionConstants.deviceWasLockedKey)
-        
-        lockObserver = NotificationCenter.default.addObserver(
-            forName: UIApplication.protectedDataWillBecomeUnavailableNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                guard let self = self, self.activeEggTitle != nil else { return }
-                self.deviceWasLocked = true
-                UserDefaults.standard.set(true, forKey: FocusSessionConstants.deviceWasLockedKey)
-                print("[CrackedSwift] 🔒 Device lock detected (protected data becoming unavailable)")
-            }
+    private func endBackgroundTask() {
+        if bgTaskId != .invalid {
+            UIApplication.shared.endBackgroundTask(bgTaskId)
+            bgTaskId = .invalid
         }
     }
     
-    /// Stop listening for device-lock notifications. Called when a session ends.
-    private func stopLockDetection() {
-        if let observer = lockObserver {
-            NotificationCenter.default.removeObserver(observer)
-            lockObserver = nil
+    /// Called when the delayed background check confirms the user left intentionally.
+    private func didDetectAppSwitch() {
+        if isPiggybankMode {
+            shatterPiggybankDueToAppSwitch()
+        } else if let eggTitle = activeEggTitle {
+            crackEggDueToAppSwitch(eggTitle: eggTitle)
         }
-        deviceWasLocked = false
-        UserDefaults.standard.removeObject(forKey: FocusSessionConstants.deviceWasLockedKey)
     }
     
     // MARK: - Background Handling
     
     func handleAppBecomingInactive() {
-        // No-op. Scene-phase–based detection happens in handleAppBackgrounded / handleAppForegrounded.
+        // No-op for now.
+        // Notification Center / Control Center only move the app to .inactive (not .background),
+        // so handleAppBackgrounded() won't fire and the user won't be penalised.
     }
     
     func handleAppBackgrounded() {
@@ -505,27 +489,62 @@ class TimerManager: ObservableObject {
         
         let bgTime = Date()
         backgroundStartTime = bgTime
+        appSwitchDetected = false
         
-        // Reset lock detection for this background cycle.
-        // The protectedDataWillBecomeUnavailable notification will set it to true
-        // if the device locks while we're backgrounded.
-        deviceWasLocked = false
-        UserDefaults.standard.set(false, forKey: FocusSessionConstants.deviceWasLockedKey)
-        
-        print("[CrackedSwift] ⏸️ BACKGROUND: App went to background (will detect lock vs. intentional leave on return)")
+        print("[CrackedSwift] ⏸️ BACKGROUND: App went to background (checking lock vs. leave…)")
         dataManager.saveTimerState(timeRemaining: timeRemaining, wasRunning: true, sessionStartTime: sessionStartTime, activeEggTitle: activeEggTitle, isPiggybankMode: isPiggybankMode, backgroundTime: bgTime)
         stopTimerTick()
+        
+        // ── Delayed lock check (Flora-style) ──
+        // Request background execution so the 0.2 s delay actually fires before iOS suspends us.
+        bgTaskId = UIApplication.shared.beginBackgroundTask { [weak self] in
+            self?.endBackgroundTask()
+        }
+        
+        // After 0.2 s, read the Darwin lock flag set by LockDetectionManager.
+        // If the device locked (side button / auto-lock) the flag is already true.
+        // If the user just swiped home, the flag is still false → app switch.
+        let workItem = DispatchWorkItem { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self = self, self.activeEggTitle != nil else {
+                    self?.endBackgroundTask()
+                    return
+                }
+                
+                if LockDetectionManager.shared.isScreenLocked {
+                    self.appSwitchDetected = false
+                    print("[CrackedSwift] 🔒 Background check (0.2 s): device locked → safe (phone sleep)")
+                } else {
+                    self.appSwitchDetected = true
+                    print("[CrackedSwift] 🔴 Background check (0.2 s): device NOT locked → app switch detected")
+                }
+                
+                self.endBackgroundTask()
+            }
+        }
+        backgroundCheckWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2, execute: workItem)
     }
     
     func handleAppForegrounded() {
         let appState = UIApplication.shared.applicationState
         guard appState == .active else { return }
         
+        // ── Read & reset the Darwin lock flag BEFORE any early returns ──
+        // This must happen first so the flag is consumed exactly once per cycle.
+        let wasLockedDuringBackground = LockDetectionManager.shared.isScreenLocked
+        LockDetectionManager.shared.resetLockState()
+        
+        // Cancel any pending 0.2 s background check (we'll use its result or fall back)
+        backgroundCheckWorkItem?.cancel()
+        backgroundCheckWorkItem = nil
+        endBackgroundTask()
+        
         // ── 1. No active session → nothing to do ──
         if activeEggTitle == nil && timeRemaining == 0 {
-            ScreenTimeManager.shared.checkAndClearViolation() // Clear any stale flags
             backgroundStartTime = nil
-            print("[CrackedSwift] 🟢 Foreground: No active session, ignoring foreground checks")
+            appSwitchDetected = false
+            print("[CrackedSwift] 🟢 Foreground: No active session, ignoring")
             return
         }
         
@@ -544,69 +563,53 @@ class TimerManager: ObservableObject {
         // Must have an active session to proceed with crack/resume logic
         guard activeEggTitle != nil else {
             backgroundStartTime = nil
+            appSwitchDetected = false
             return
         }
         
-        // ── 3. Skip violation check if we never went to background ──
-        // If backgroundStartTime is nil, the app went inactive→active (e.g. notification
-        // center, Control Center, Siri). Do NOT consume the violation flag here — the
-        // Device Activity event fires only once per schedule, so clearing the flag without
-        // cracking would waste the one-time trigger and leave the session unprotected.
+        // ── 3. Skip if we never went to background ──
+        // Notification Center / Control Center only move the app to .inactive,
+        // so backgroundStartTime stays nil → no penalty.
         guard backgroundStartTime != nil else {
-            print("[CrackedSwift] 🟢 Foreground: inactive→active transition (no background), skipping violation check")
+            print("[CrackedSwift] 🟢 Foreground: inactive→active (Notification Center / Control Center), skipping")
             return
         }
         
-        // ── 4. Screen Time violation check (primary detection — user used a monitored app) ──
-        let hadViolation = ScreenTimeManager.shared.checkAndClearViolation(since: backgroundStartTime)
-        
-        // Crack immediately if Screen Time confirms user used a monitored app.
-        // NOTE: removed isTimerRunning guard — after app restore isTimerRunning is false
-        // but the session is still active (activeEggTitle != nil).
-        if hadViolation {
-            print("[CrackedSwift] 🔴 Foreground: LEFT APP (Screen Time violation) → cracking/shattering")
-            if isPiggybankMode {
-                shatterPiggybankDueToAppSwitch()
-            } else if let eggTitle = activeEggTitle {
-                crackEggDueToAppSwitch(eggTitle: eggTitle)
-            }
-            backgroundStartTime = nil
-            return
-        }
-        
-        // ── 5. Flora-style lock vs. intentional leave detection ──
-        // When the device LOCKS, iOS makes protected data unavailable — our notification
-        // observer sets `deviceWasLocked = true`. If the flag is still false, the user
-        // swiped to the home screen or switched to a non-monitored app without locking.
+        // ── 4. Flora-style lock vs. intentional leave ──
         //
-        // Decision matrix:
-        //   Device locked          → phone sleep, safe to resume
-        //   NOT locked + < grace   → brief accidental leave, safe to resume
-        //   NOT locked + ≥ grace   → intentional leave, crack/shatter
-        let wasLocked = deviceWasLocked || UserDefaults.standard.bool(forKey: FocusSessionConstants.deviceWasLockedKey)
-        let timeInBackground = backgroundStartTime.map { Date().timeIntervalSince($0) } ?? 0
+        // Decision logic (three signals, checked in priority order):
+        //   a) appSwitchDetected == true   → 0.2 s check confirmed: NOT locked → CRACK
+        //   b) wasLockedDuringBackground   → Darwin notification fired → phone sleep → SAFE
+        //   c) neither flag set            → user returned before 0.2 s check could run
+        //                                    AND no Darwin lock notification → CRACK
+        //
+        // Case (c) catches very fast home-swipe-and-return (< 0.2 s).
+        // A legitimate quick lock/unlock (< 0.2 s) is physically impossible because the
+        // user must authenticate (Face ID / passcode) to return, which takes longer.
         
-        if !wasLocked && timeInBackground >= FocusSessionConstants.homeScreenGracePeriodSeconds {
-            // Device was NOT locked and user was away beyond grace period → intentional leave
-            print("[CrackedSwift] 🔴 Foreground: device NOT locked, away for \(String(format: "%.1f", timeInBackground))s (≥ \(FocusSessionConstants.homeScreenGracePeriodSeconds)s grace) → cracking/shattering")
-            if isPiggybankMode {
-                shatterPiggybankDueToAppSwitch()
-            } else if let eggTitle = activeEggTitle {
-                crackEggDueToAppSwitch(eggTitle: eggTitle)
-            }
+        let shouldCrack: Bool
+        if appSwitchDetected {
+            // Background check ran and confirmed no lock → app switch
+            shouldCrack = true
+        } else if wasLockedDuringBackground {
+            // Darwin notification fired → device was locked → safe
+            shouldCrack = false
+        } else {
+            // Neither flag set → no lock detected, user left intentionally
+            shouldCrack = true
+        }
+        
+        if shouldCrack {
+            print("[CrackedSwift] 🔴 Foreground: user left app (appSwitchDetected=\(appSwitchDetected), locked=\(wasLockedDuringBackground)) → cracking/shattering")
+            didDetectAppSwitch()
             backgroundStartTime = nil
+            appSwitchDetected = false
             return
         }
         
-        if !wasLocked {
-            print("[CrackedSwift] 🟡 Foreground: brief leave (\(String(format: "%.1f", timeInBackground))s < grace period) → resuming")
-        } else {
-            print("[CrackedSwift] 🟢 Foreground: device was locked → resuming (phone sleep)")
-        }
+        print("[CrackedSwift] 🟢 Foreground: device was locked → resuming (phone sleep)")
         
-        // ── 6. Safe scenario → adjust timer for time in background and resume ──
-        let capturedBgStart = backgroundStartTime
-        
+        // ── 5. Safe: device was locked → adjust timer for background time and resume ──
         if timeRemaining > 0 && !isOnBreak {
             if let bgStartTime = backgroundStartTime {
                 let elapsed = Date().timeIntervalSince(bgStartTime)
@@ -617,6 +620,7 @@ class TimerManager: ObservableObject {
             if timeRemaining <= 0 {
                 timerCompleted()
                 backgroundStartTime = nil
+                appSwitchDetected = false
                 return
             } else {
                 isTimerRunning = true
@@ -627,34 +631,7 @@ class TimerManager: ObservableObject {
         }
         
         backgroundStartTime = nil
-        
-        // ── 7. Refresh Device Activity monitoring ──
-        // Re-start monitoring with the remaining time so the schedule and event are
-        // renewed. This guards against iOS silently killing the extension, schedule
-        // expiry from timer drift, and ensures the one-time event trigger is fresh.
-        if timeRemaining > 0 {
-            ScreenTimeManager.shared.startFocusMonitoring(timerDurationSeconds: timeRemaining)
-        }
-        
-        // ── 8. Delayed re-check: catch slow Device Activity extension ──
-        // The extension runs in a separate process and may not have set the
-        // violation flag by the time we checked above. Re-check after a delay.
-        crackEggTask?.cancel()
-        crackEggTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 3_000_000_000) // 3 seconds
-            guard !Task.isCancelled, let self = self else { return }
-            guard self.activeEggTitle != nil else { return } // Session already ended
-            
-            let delayedViolation = ScreenTimeManager.shared.checkAndClearViolation(since: capturedBgStart)
-            if delayedViolation {
-                print("[CrackedSwift] 🔴 Delayed re-check: Screen Time violation detected after 3s → cracking/shattering")
-                if self.isPiggybankMode {
-                    self.shatterPiggybankDueToAppSwitch()
-                } else if let eggTitle = self.activeEggTitle {
-                    self.crackEggDueToAppSwitch(eggTitle: eggTitle)
-                }
-            }
-        }
+        appSwitchDetected = false
     }
     
     private func crackEggDueToAppSwitch(eggTitle: String) {
@@ -687,8 +664,7 @@ class TimerManager: ObservableObject {
         initialTimerDuration = 0
         sessionStartTime = nil
         dataManager.clearTimerState()
-        ScreenTimeManager.shared.stopFocusMonitoring()
-        stopLockDetection()
+        // ScreenTimeManager.shared.stopFocusMonitoring()
     }
     
     private func shatterPiggybankDueToAppSwitch() {
@@ -703,8 +679,7 @@ class TimerManager: ObservableObject {
         initialTimerDuration = 0
         sessionStartTime = nil
         dataManager.clearTimerState()
-        ScreenTimeManager.shared.stopFocusMonitoring()
-        stopLockDetection()
+        // ScreenTimeManager.shared.stopFocusMonitoring()
         onPiggybankShattered?()
         onSessionFailed?()
     }

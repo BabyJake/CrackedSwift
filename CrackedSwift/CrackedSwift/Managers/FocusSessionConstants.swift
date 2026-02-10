@@ -34,15 +34,4 @@ enum FocusSessionConstants {
     /// Extra buffer added to the DeviceActivity schedule beyond the timer duration.
     /// Covers break time (up to 10 min), timer tick drift, and safety margin.
     static let scheduleBufferSeconds: TimeInterval = 30 * 60
-
-    // MARK: - Lock vs. Leave Detection (Flora-style)
-
-    /// UserDefaults key: set to `true` when a device lock is detected while the app is backgrounded
-    /// during an active session. Read on foreground return to distinguish lock from intentional leave.
-    static let deviceWasLockedKey = "focusSessionDeviceWasLocked"
-
-    /// Grace period (seconds) before treating a non-lock background as "intentionally left the app."
-    /// Helps avoid false positives from accidental home-button presses, quick system dialogs, etc.
-    /// Set to 0 for strict Flora-style behavior (any leave = immediate crack).
-    static let homeScreenGracePeriodSeconds: TimeInterval = 3
 }
