@@ -57,7 +57,7 @@ struct GameData: Codable {
     // - grassTileOffset: Move grass tiles (x, y in pixels)
     // - animalOffset: Move animals relative to tiles (x, y in pixels)
     var grassTileOffset: TileOffset = TileOffset(x: 0, y: 0) // Offset for grass tiles
-    var animalOffset: TileOffset = TileOffset(x: 0, y: -10) // Offset for animals (typically above tile)
+    var animalOffset: TileOffset = TileOffset(x: 0, y: 0) // Offset for animals relative to tile center (positive = down)
     
     struct TileOffset: Codable {
         var x: Double

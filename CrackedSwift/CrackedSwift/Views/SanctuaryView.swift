@@ -240,25 +240,25 @@ struct AnimalInstanceView: View {
     var body: some View {
         let pos = isometricToScreen(x: instance.gridPosition.x, y: instance.gridPosition.y)
         let gameData = GameDataManager.shared
-        let grassOffset = gameData.getGrassTileOffset()
         let animalOffset = gameData.getAnimalOffset()
         
-        // Calculate positioning so animals sit on tiles
-        let animalFrameHeight: CGFloat = instance.isGrave ? tileHeight * 1.5 : tileWidth * 0.8
+        // Sprite sizes — keep within tile bounds to avoid overlap
+        let spriteWidth: CGFloat = tileWidth * 0.55
+        let spriteHeight: CGFloat = instance.isGrave ? tileHeight * 1.0 : spriteWidth
         
-        // Position animal so its bottom sits on the bottom of the grass tile
-        let adjustedY = pos.y + (tileHeight / 2) - (animalFrameHeight / 2) + CGFloat(grassOffset.y + animalOffset.y)
-        let finalX = pos.x + CGFloat(grassOffset.x + animalOffset.x)
-        let finalY = adjustedY
+        // Position sprite so its bottom "feet" sit at the tile's visual center (diamond center).
+        // .position() places the view's center, so shift up by half the sprite height.
+        let finalX = pos.x + CGFloat(animalOffset.x)
+        let finalY = pos.y - (spriteHeight / 2) + CGFloat(animalOffset.y)
         let objectZIndex = Double(instance.gridPosition.x + instance.gridPosition.y) + 100.0
         
         Group {
             if instance.isGrave {
                 GraveCard(instance: instance)
-                    .frame(width: tileWidth * 0.8, height: tileHeight * 1.5)
+                    .frame(width: spriteWidth, height: spriteHeight)
             } else {
                 AnimalGridCard(instance: instance)
-                    .frame(width: tileWidth * 0.8, height: tileWidth * 0.8)
+                    .frame(width: spriteWidth, height: spriteHeight)
             }
         }
         .position(x: finalX, y: finalY)
