@@ -28,6 +28,7 @@ struct MenuView: View {
     @State private var showingStreakRewards = false
     @State private var showingPiggybankShatteredAlert = false
     @State private var showingPiggybankResult = false
+    @State private var showingAccount = false
     // Screen Time settings UI commented out — using Darwin lock detection instead.
     // @State private var showingSettings = false
     
@@ -87,7 +88,7 @@ struct MenuView: View {
                     
                     Spacer()
                     
-                    // Coin counter and settings button (top-right)
+                    // Coin counter and account button (top-right)
                     HStack(spacing: 16) {
                         HStack(spacing: 8) {
                             Text("Coins: \(gameData.getTotalCoins())")
@@ -105,19 +106,19 @@ struct MenuView: View {
                                 .frame(width: 24, height: 24)
                         }
                         
-                        // Settings button — commented out (Screen Time exclusions no longer used)
-                        // Button(action: {
-                        //     showingSettings = true
-                        // }) {
-                        //     Image(systemName: "gearshape.fill")
-                        //         .foregroundColor(.white)
-                        //         .font(.system(size: 20))
-                        //         .padding(8)
-                        //         .background(
-                        //             Circle()
-                        //                 .fill(Color.black.opacity(0.3))
-                        //         )
-                        // }
+                        // Account / profile button
+                        Button(action: {
+                            showingAccount = true
+                        }) {
+                            Image(systemName: AuthManager.shared.isSignedIn ? "person.crop.circle.fill" : "person.crop.circle")
+                                .foregroundColor(.white)
+                                .font(.system(size: 22))
+                                .padding(8)
+                                .background(
+                                    Circle()
+                                        .fill(Color.black.opacity(0.3))
+                                )
+                        }
                     }
                 }
                 .padding(.horizontal, 20)
@@ -270,6 +271,9 @@ struct MenuView: View {
             }
             .sheet(isPresented: $showingStreakRewards) {
                 StreakRewardsView()
+            }
+            .sheet(isPresented: $showingAccount) {
+                AccountView()
             }
             // Screen Time settings sheet commented out — no longer needed.
             // .sheet(isPresented: $showingSettings) {

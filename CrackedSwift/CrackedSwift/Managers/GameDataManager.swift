@@ -31,7 +31,9 @@ class GameDataManager: ObservableObject {
             // New player - start with 9 FarmEggs (temp for testing)
             gameData.purchasedEggs["FarmEgg"] = 9
             gameData.currentSelectedEgg = "FarmEgg"
-            saveGameData()
+            // Save locally only — don't push starter data to cloud
+            // (syncOnLaunch will handle cloud restore vs push)
+            saveLocalOnly()
         }
     }
     
@@ -39,6 +41,25 @@ class GameDataManager: ObservableObject {
         if let encoded = try? JSONEncoder().encode(gameData) {
             userDefaults.set(encoded, forKey: gameDataKey)
         }
+        // Schedule debounced sync to CloudKit
+        CloudKitManager.shared.scheduleSave(gameData: gameData)
+    }
+    
+    /// Saves to UserDefaults only, without triggering a CloudKit sync.
+    /// Used during initial setup to avoid overwriting cloud data before restore.
+    private func saveLocalOnly() {
+        if let encoded = try? JSONEncoder().encode(gameData) {
+            userDefaults.set(encoded, forKey: gameDataKey)
+        }
+    }
+    
+    /// Replaces local game data with cloud data (used during cloud restore).
+    func replaceGameData(_ newData: GameData) {
+        self.gameData = newData
+        if let encoded = try? JSONEncoder().encode(newData) {
+            userDefaults.set(encoded, forKey: gameDataKey)
+        }
+        objectWillChange.send()
     }
     
     // MARK: - Coins
@@ -228,6 +249,20 @@ class GameDataManager: ObservableObject {
         let remaining = max(0, breakDuration - elapsed)
         
         return (true, remaining)
+    }
+    
+    // MARK: - Study Time Tracking
+    
+    /// Adds completed session duration (seconds) to the lifetime total.
+    func addStudyTime(_ duration: TimeInterval) {
+        guard duration > 0 else { return }
+        gameData.totalStudyTime += duration
+        saveGameData()
+    }
+    
+    /// Returns total accumulated study time in seconds.
+    func getTotalStudyTime() -> TimeInterval {
+        return gameData.totalStudyTime
     }
     
     // MARK: - Hatch Statistics

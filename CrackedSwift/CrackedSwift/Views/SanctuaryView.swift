@@ -432,11 +432,11 @@ struct StatisticsView: View {
                         .cornerRadius(12)
                         .padding(.horizontal)
                         
-                        // Estimated Study Time
-                        if estimatedStudyHours > 0 {
+                        // Total Study Time
+                        if totalStudyTimeSeconds > 0 {
                             StatCard(
-                                title: "Estimated Study Time",
-                                value: String(format: "%.1f hours", estimatedStudyHours),
+                                title: "Total Study Time",
+                                value: formattedStudyTime,
                                 icon: "clock.fill",
                                 color: AppColors.buttonGreen
                             )
@@ -484,10 +484,19 @@ struct StatisticsView: View {
         return counts
     }
     
-    private var estimatedStudyHours: Double {
-        // Estimate based on hatch counts (assuming average 30 min per hatch)
-        let totalHatches = gameData.getYearlyHatchCount()
-        return Double(totalHatches) * 0.5 // 30 minutes = 0.5 hours per hatch
+    private var totalStudyTimeSeconds: TimeInterval {
+        return gameData.getTotalStudyTime()
+    }
+    
+    private var formattedStudyTime: String {
+        let totalSeconds = totalStudyTimeSeconds
+        let hours = Int(totalSeconds) / 3600
+        let minutes = (Int(totalSeconds) % 3600) / 60
+        if hours > 0 {
+            return "\(hours)h \(minutes)m"
+        } else {
+            return "\(minutes)m"
+        }
     }
 }
 

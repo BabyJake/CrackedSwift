@@ -4,6 +4,10 @@
 //
 //  Replaces: PlayerPrefs data storage
 //
+//  IMPORTANT: Every property uses a resilient custom decoder so that adding,
+//  renaming, or changing fields between builds will NOT wipe user data.
+//  Each key is decoded individually with a fallback default.
+//
 
 import Foundation
 
@@ -15,11 +19,6 @@ struct GameData: Codable {
     /// When multiple of same egg: which instance is selected (e.g. "FarmEgg-1"). Nil = any instance.
     var currentSelectedEggInstanceId: String? = nil
     var pendingAnimals: [PendingAnimal] = [] // Newly hatched animals waiting to be placed
-    
-    struct PendingAnimal: Codable {
-        let animalName: String
-        let hatchDate: Date
-    }
     
     // Timer state
     var savedTimeRemaining: TimeInterval = 0
@@ -47,6 +46,9 @@ struct GameData: Codable {
     var graveEggTypes: [String: String] = [:] // Grave ID: Egg Type
     var graveDates: [String: Date] = [:] // Grave ID: Hatch Date
     
+    // Total actual study time (seconds) accumulated from successful sessions
+    var totalStudyTime: TimeInterval = 0
+    
     // Grid positions for animals and graves
     var animalInstances: [AnimalInstance] = []
     var originalPositions: [String: GridPosition] = [:] // For "All" view restoration
@@ -59,18 +61,146 @@ struct GameData: Codable {
     var grassTileOffset: TileOffset = TileOffset(x: 0, y: 0) // Offset for grass tiles
     var animalOffset: TileOffset = TileOffset(x: 0, y: 0) // Offset for animals relative to tile center (positive = down)
     
+    // MARK: - Coding Keys
+    
+    enum CodingKeys: String, CodingKey {
+        case totalCoins
+        case unlockedAnimals
+        case purchasedEggs
+        case currentSelectedEgg
+        case currentSelectedEggInstanceId
+        case pendingAnimals
+        case savedTimeRemaining
+        case savedSessionStartTime
+        case wasTimerRunning
+        case savedActiveEggTitle
+        case savedIsPiggybankMode
+        case savedBackgroundTime
+        case savedInitialTimerDuration
+        case lastBreakTime
+        case isOnBreak
+        case breakStartTime
+        case hatchCounts
+        case lastLoginDate
+        case currentStreak
+        case unlockedGraves
+        case graveEggTypes
+        case graveDates
+        case totalStudyTime
+        case animalInstances
+        case originalPositions
+        case viewPositions
+        case grassTileOffset
+        case animalOffset
+    }
+    
+    // MARK: - Resilient Decoder
+    // Each property decoded individually so a missing/changed key never nukes the whole save.
+    
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        
+        totalCoins              = (try? c.decode(Int.self, forKey: .totalCoins)) ?? 0
+        unlockedAnimals         = (try? c.decode([String].self, forKey: .unlockedAnimals)) ?? []
+        purchasedEggs           = (try? c.decode([String: Int].self, forKey: .purchasedEggs)) ?? [:]
+        currentSelectedEgg      = try? c.decode(String.self, forKey: .currentSelectedEgg)
+        currentSelectedEggInstanceId = try? c.decode(String.self, forKey: .currentSelectedEggInstanceId)
+        pendingAnimals          = (try? c.decode([PendingAnimal].self, forKey: .pendingAnimals)) ?? []
+        
+        savedTimeRemaining      = (try? c.decode(TimeInterval.self, forKey: .savedTimeRemaining)) ?? 0
+        savedSessionStartTime   = try? c.decode(Date.self, forKey: .savedSessionStartTime)
+        wasTimerRunning         = (try? c.decode(Bool.self, forKey: .wasTimerRunning)) ?? false
+        savedActiveEggTitle     = try? c.decode(String.self, forKey: .savedActiveEggTitle)
+        savedIsPiggybankMode    = (try? c.decode(Bool.self, forKey: .savedIsPiggybankMode)) ?? false
+        savedBackgroundTime     = try? c.decode(Date.self, forKey: .savedBackgroundTime)
+        savedInitialTimerDuration = (try? c.decode(TimeInterval.self, forKey: .savedInitialTimerDuration)) ?? 0
+        
+        lastBreakTime           = try? c.decode(Date.self, forKey: .lastBreakTime)
+        isOnBreak               = (try? c.decode(Bool.self, forKey: .isOnBreak)) ?? false
+        breakStartTime          = try? c.decode(Date.self, forKey: .breakStartTime)
+        
+        hatchCounts             = (try? c.decode([DailyHatchCount].self, forKey: .hatchCounts)) ?? []
+        
+        lastLoginDate           = try? c.decode(Date.self, forKey: .lastLoginDate)
+        currentStreak           = (try? c.decode(Int.self, forKey: .currentStreak)) ?? 0
+        
+        unlockedGraves          = (try? c.decode([String].self, forKey: .unlockedGraves)) ?? []
+        graveEggTypes           = (try? c.decode([String: String].self, forKey: .graveEggTypes)) ?? [:]
+        graveDates              = (try? c.decode([String: Date].self, forKey: .graveDates)) ?? [:]
+        
+        totalStudyTime          = (try? c.decode(TimeInterval.self, forKey: .totalStudyTime)) ?? 0
+        animalInstances         = (try? c.decode([AnimalInstance].self, forKey: .animalInstances)) ?? []
+        originalPositions       = (try? c.decode([String: GridPosition].self, forKey: .originalPositions)) ?? [:]
+        viewPositions           = (try? c.decode([String: [String: GridPosition]].self, forKey: .viewPositions)) ?? [:]
+        
+        grassTileOffset         = (try? c.decode(TileOffset.self, forKey: .grassTileOffset)) ?? TileOffset(x: 0, y: 0)
+        animalOffset            = (try? c.decode(TileOffset.self, forKey: .animalOffset)) ?? TileOffset(x: 0, y: 0)
+    }
+    
+    // MARK: - Default memberwise init (used when creating fresh GameData)
+    
+    init() {}
+    
+    // MARK: - Nested Types
+    
+    struct PendingAnimal: Codable {
+        let animalName: String
+        let hatchDate: Date
+        
+        enum CodingKeys: String, CodingKey {
+            case animalName
+            case hatchDate
+        }
+        
+        init(animalName: String, hatchDate: Date) {
+            self.animalName = animalName
+            self.hatchDate = hatchDate
+        }
+        
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            animalName = (try? c.decode(String.self, forKey: .animalName)) ?? "Unknown"
+            hatchDate  = (try? c.decode(Date.self, forKey: .hatchDate)) ?? Date()
+        }
+    }
+    
     struct TileOffset: Codable {
         var x: Double
         var y: Double
+        
+        enum CodingKeys: String, CodingKey {
+            case x, y
+        }
+        
+        init(x: Double, y: Double) {
+            self.x = x
+            self.y = y
+        }
+        
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            x = (try? c.decode(Double.self, forKey: .x)) ?? 0
+            y = (try? c.decode(Double.self, forKey: .y)) ?? 0
+        }
     }
     
     struct DailyHatchCount: Codable {
         let date: Date
         var count: Int
         
+        enum CodingKeys: String, CodingKey {
+            case date, count
+        }
+        
         init(date: Date, count: Int = 1) {
             self.date = date
             self.count = count
+        }
+        
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            date  = (try? c.decode(Date.self, forKey: .date)) ?? Date()
+            count = (try? c.decode(Int.self, forKey: .count)) ?? 1
         }
     }
     
@@ -82,15 +212,50 @@ struct GameData: Codable {
         var isNewlyHatched: Bool
         let isGrave: Bool
         let eggType: String?
+        
+        enum CodingKeys: String, CodingKey {
+            case id, animalName, gridPosition, hatchDate, isNewlyHatched, isGrave, eggType
+        }
+        
+        init(id: String, animalName: String, gridPosition: GridPosition, hatchDate: Date, isNewlyHatched: Bool, isGrave: Bool, eggType: String?) {
+            self.id = id
+            self.animalName = animalName
+            self.gridPosition = gridPosition
+            self.hatchDate = hatchDate
+            self.isNewlyHatched = isNewlyHatched
+            self.isGrave = isGrave
+            self.eggType = eggType
+        }
+        
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            id            = (try? c.decode(String.self, forKey: .id)) ?? UUID().uuidString
+            animalName    = (try? c.decode(String.self, forKey: .animalName)) ?? "Unknown"
+            gridPosition  = (try? c.decode(GridPosition.self, forKey: .gridPosition)) ?? GridPosition(x: 0, y: 0)
+            hatchDate     = (try? c.decode(Date.self, forKey: .hatchDate)) ?? Date()
+            isNewlyHatched = (try? c.decode(Bool.self, forKey: .isNewlyHatched)) ?? false
+            isGrave       = (try? c.decode(Bool.self, forKey: .isGrave)) ?? false
+            eggType       = try? c.decode(String.self, forKey: .eggType)
+        }
     }
     
     struct GridPosition: Codable, Hashable {
         let x: Int
         let y: Int
         
+        enum CodingKeys: String, CodingKey {
+            case x, y
+        }
+        
         init(x: Int, y: Int) {
             self.x = x
             self.y = y
+        }
+        
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            x = (try? c.decode(Int.self, forKey: .x)) ?? 0
+            y = (try? c.decode(Int.self, forKey: .y)) ?? 0
         }
         
         static func == (lhs: GridPosition, rhs: GridPosition) -> Bool {

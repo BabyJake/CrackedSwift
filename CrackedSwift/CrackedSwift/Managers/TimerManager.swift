@@ -216,6 +216,9 @@ class TimerManager: ObservableObject {
             actualStudyDuration = max(0, initialTimerDuration - timeRemaining)
         }
         
+        // Record actual study time for statistics
+        dataManager.addStudyTime(actualStudyDuration)
+        
         let coinsEarned = awardCoinsForSession(completed: true)
         onCoinsAwarded?(coinsEarned)
         

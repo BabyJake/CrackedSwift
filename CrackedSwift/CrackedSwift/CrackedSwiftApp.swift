@@ -11,32 +11,34 @@ import SwiftUI
 struct CrackedSwiftApp: App {
     // Initialize managers early
     @StateObject private var gameData = GameDataManager.shared
+    @StateObject private var authManager = AuthManager.shared
     
     var body: some Scene {
         WindowGroup {
             RootView()
                 .environmentObject(gameData)
+                .environmentObject(authManager)
                 .background(ScenePhaseHandler())
+                .task {
+                    authManager.checkCredentialState()
+                    await CloudKitManager.shared.syncOnLaunch()
+                }
         }
     }
 }
 
-/// Shows main app only after Screen Time setup is complete; otherwise shows blocking setup screen.
-/// Screen Time gate disabled — using Darwin lock detection instead (Flora-style).
+/// Shows the one-time account prompt if the user hasn't signed in or skipped,
+/// then shows the main app.
 struct RootView: View {
     @EnvironmentObject var gameData: GameDataManager
-    // @ObservedObject private var screenTime = ScreenTimeManager.shared
+    @EnvironmentObject var authManager: AuthManager
     
     var body: some View {
-        ContentView()
-        // Screen Time setup gate commented out — no longer needed.
-        // Group {
-        //     if screenTime.hasCompletedSetup {
-        //         ContentView()
-        //     } else {
-        //         ScreenTimeRequiredView()
-        //     }
-        // }
+        if !authManager.hasSeenAccountPrompt && !authManager.isSignedIn {
+            AccountPromptView()
+        } else {
+            ContentView()
+        }
     }
 }
 
