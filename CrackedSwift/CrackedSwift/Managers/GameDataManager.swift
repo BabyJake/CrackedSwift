@@ -110,6 +110,10 @@ class GameDataManager: ObservableObject {
         saveGameData()
     }
     
+    func getPendingAnimals() -> [GameData.PendingAnimal] {
+        return gameData.pendingAnimals
+    }
+    
     func clearPendingAnimal() {
         gameData.pendingAnimals.removeAll()
         saveGameData()
@@ -258,6 +262,11 @@ class GameDataManager: ObservableObject {
         guard duration > 0 else { return }
         gameData.totalStudyTime += duration
         saveGameData()
+        
+        // Push updated stats to leaderboard
+        Task {
+            await LeaderboardManager.shared.pushStats()
+        }
     }
     
     /// Returns total accumulated study time in seconds.
@@ -276,6 +285,11 @@ class GameDataManager: ObservableObject {
             gameData.hatchCounts.append(GameData.DailyHatchCount(date: today))
         }
         saveGameData()
+        
+        // Push updated stats to leaderboard
+        Task {
+            await LeaderboardManager.shared.pushStats()
+        }
     }
     
     func getDailyHatchCount() -> Int {

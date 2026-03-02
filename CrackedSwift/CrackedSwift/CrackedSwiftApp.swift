@@ -22,12 +22,16 @@ struct CrackedSwiftApp: App {
                 .task {
                     authManager.checkCredentialState()
                     await CloudKitManager.shared.syncOnLaunch()
+                    
+                    // One-time cleanup of schema seed records — remove after one run
+                    await CloudKitSchemaSeeder.cleanupSeedRecords()
                 }
         }
     }
 }
 
 /// Shows the one-time account prompt if the user hasn't signed in or skipped,
+/// then the one-time display name prompt after sign-in,
 /// then shows the main app.
 struct RootView: View {
     @EnvironmentObject var gameData: GameDataManager
@@ -35,8 +39,13 @@ struct RootView: View {
     
     var body: some View {
         if !authManager.hasSeenAccountPrompt && !authManager.isSignedIn {
+            // Step 1: Show sign-in / skip prompt
             AccountPromptView()
+        } else if authManager.isSignedIn && !authManager.hasSetDisplayName {
+            // Step 2: One-time display name choice (right after first sign-in)
+            DisplayNamePromptView()
         } else {
+            // Step 3: Main app
             ContentView()
         }
     }

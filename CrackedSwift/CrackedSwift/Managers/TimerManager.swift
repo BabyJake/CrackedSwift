@@ -19,6 +19,33 @@ class TimerManager: ObservableObject {
     @Published var isOnBreak: Bool = false
     @Published var breakTimeRemaining: TimeInterval = 0
     
+    // #region agent log helper
+    private func logDebug(_ location: String, _ message: String, _ data: [String: Any] = [:]) {
+        let logPath = "/Users/jacobtaylor/Desktop/CrackedSwift/.cursor/debug.log"
+        let logEntry: [String: Any] = [
+            "location": location,
+            "message": message,
+            "data": data,
+            "timestamp": Int64(Date().timeIntervalSince1970 * 1000)
+        ]
+        if let jsonData = try? JSONSerialization.data(withJSONObject: logEntry),
+           let jsonString = String(data: jsonData, encoding: .utf8) {
+            let logLine = jsonString + "\n"
+            if let fileHandle = FileHandle(forWritingAtPath: logPath) {
+                fileHandle.seekToEndOfFile()
+                fileHandle.write(logLine.data(using: .utf8)!)
+                fileHandle.closeFile()
+            } else {
+                // File doesn't exist, create it
+                let fileManager = FileManager.default
+                let directory = (logPath as NSString).deletingLastPathComponent
+                try? fileManager.createDirectory(atPath: directory, withIntermediateDirectories: true, attributes: nil)
+                try? logLine.write(toFile: logPath, atomically: false, encoding: .utf8)
+            }
+        }
+    }
+    // #endregion
+    
     private var timer: Timer?
     private var breakTimer: Timer?
     private var crackEggTask: Task<Void, Never>?
@@ -313,6 +340,15 @@ class TimerManager: ObservableObject {
                 let elapsed = Date().timeIntervalSince(referenceTime)
                 let adjustedTimeRemaining = timeRemaining - elapsed
                 
+                // #region agent log
+                logDebug("TimerManager.swift:312", "restoreTimerState calculating elapsed", [
+                    "timeRemaining": timeRemaining,
+                    "elapsed": elapsed,
+                    "adjustedTimeRemaining": adjustedTimeRemaining,
+                    "hasBackgroundTime": state.backgroundTime != nil
+                ])
+                // #endregion
+                
                 if adjustedTimeRemaining > 0 {
                     // Timer still has time remaining - restore state
                     timeRemaining = adjustedTimeRemaining
@@ -326,8 +362,14 @@ class TimerManager: ObservableObject {
                     // no extra setup needed. The Darwin flag from before termination
                     // is lost, but handleAppForegrounded() will still run and check
                     // the live Darwin flag (covers the lock-then-relaunch case).
+                    // #region agent log
+                    logDebug("TimerManager.swift:329", "Timer restored with time remaining", ["timeRemaining": timeRemaining])
+                    // #endregion
                 } else {
                     // Timer expired while app was closed - complete it
+                    // #region agent log
+                    logDebug("TimerManager.swift:335", "Timer expired during restore - completing", ["elapsed": elapsed])
+                    // #endregion
                     timeRemaining = 0
                     sessionStartTime = startTime
                     isTimerRunning = false
@@ -543,11 +585,24 @@ class TimerManager: ObservableObject {
         backgroundCheckWorkItem = nil
         endBackgroundTask()
         
+        // #region agent log
+        logDebug("TimerManager.swift:532", "handleAppForegrounded entry", [
+            "activeEggTitle": activeEggTitle ?? "nil",
+            "timeRemaining": timeRemaining,
+            "backgroundStartTime": backgroundStartTime?.timeIntervalSince1970 ?? 0,
+            "wasLockedDuringBackground": wasLockedDuringBackground,
+            "appSwitchDetected": appSwitchDetected
+        ])
+        // #endregion
+        
         // ── 1. No active session → nothing to do ──
         if activeEggTitle == nil && timeRemaining == 0 {
             backgroundStartTime = nil
             appSwitchDetected = false
             print("[CrackedSwift] 🟢 Foreground: No active session, ignoring")
+            // #region agent log
+            logDebug("TimerManager.swift:547", "No active session early return", [:])
+            // #endregion
             return
         }
         
@@ -575,7 +630,40 @@ class TimerManager: ObservableObject {
         // so backgroundStartTime stays nil → no penalty.
         guard backgroundStartTime != nil else {
             print("[CrackedSwift] 🟢 Foreground: inactive→active (Notification Center / Control Center), skipping")
+            // #region agent log
+            logDebug("TimerManager.swift:576", "Never went to background early return", [:])
+            // #endregion
             return
+        }
+        
+        // ── 3.5. CRITICAL: Check if timer expired naturally BEFORE crack logic ──
+        // If timer expired while backgrounded (phone locked/turned off), complete it without cracking
+        if let bgStartTime = backgroundStartTime {
+            let elapsed = Date().timeIntervalSince(bgStartTime)
+            let adjustedTimeRemaining = timeRemaining - elapsed
+            
+            // #region agent log
+            logDebug("TimerManager.swift:583", "Checking timer expiry before crack logic", [
+                "timeRemaining": timeRemaining,
+                "elapsed": elapsed,
+                "adjustedTimeRemaining": adjustedTimeRemaining,
+                "wasLockedDuringBackground": wasLockedDuringBackground,
+                "appSwitchDetected": appSwitchDetected
+            ])
+            // #endregion
+            
+            if adjustedTimeRemaining <= 0 {
+                // Timer expired naturally - complete it without cracking
+                print("[CrackedSwift] ✅ Foreground: Timer expired while backgrounded (elapsed: \(String(format: "%.1f", elapsed))s) → completing without crack")
+                // #region agent log
+                logDebug("TimerManager.swift:591", "Timer expired naturally - completing", ["elapsed": elapsed])
+                // #endregion
+                timeRemaining = 0
+                timerCompleted()
+                backgroundStartTime = nil
+                appSwitchDetected = false
+                return
+            }
         }
         
         // ── 4. Flora-style lock vs. intentional leave ──
@@ -599,11 +687,38 @@ class TimerManager: ObservableObject {
             shouldCrack = false
         } else {
             // Neither flag set → no lock detected, user left intentionally
-            shouldCrack = true
+            // BUT: If app was terminated (phone turned off), backgroundStartTime exists but
+            // Darwin notification never fired. Check if elapsed time suggests phone was off.
+            // If elapsed time is very long (> 1 hour), likely phone was turned off, not app switch.
+            if let bgStartTime = backgroundStartTime {
+                let elapsed = Date().timeIntervalSince(bgStartTime)
+                // If more than 1 hour passed, assume phone was turned off (safe)
+                if elapsed > 3600 {
+                    shouldCrack = false
+                    // #region agent log
+                    logDebug("TimerManager.swift:620", "Long elapsed time - assuming phone turned off", ["elapsed": elapsed])
+                    // #endregion
+                } else {
+                    shouldCrack = true
+                }
+            } else {
+                shouldCrack = true
+            }
         }
+        
+        // #region agent log
+        logDebug("TimerManager.swift:630", "Crack decision", [
+            "shouldCrack": shouldCrack,
+            "appSwitchDetected": appSwitchDetected,
+            "wasLockedDuringBackground": wasLockedDuringBackground
+        ])
+        // #endregion
         
         if shouldCrack {
             print("[CrackedSwift] 🔴 Foreground: user left app (appSwitchDetected=\(appSwitchDetected), locked=\(wasLockedDuringBackground)) → cracking/shattering")
+            // #region agent log
+            logDebug("TimerManager.swift:636", "Cracking egg due to app switch", [:])
+            // #endregion
             didDetectAppSwitch()
             backgroundStartTime = nil
             appSwitchDetected = false
@@ -618,9 +733,16 @@ class TimerManager: ObservableObject {
                 let elapsed = Date().timeIntervalSince(bgStartTime)
                 print("[CrackedSwift] 🟢 Foreground: resuming timer (was in background \(String(format: "%.1f", elapsed))s)")
                 timeRemaining = max(0, timeRemaining - elapsed)
+                // #region agent log
+                logDebug("TimerManager.swift:650", "Resuming timer after lock", [
+                    "timeRemaining": timeRemaining,
+                    "elapsed": elapsed
+                ])
+                // #endregion
             }
             
             if timeRemaining <= 0 {
+                // Timer expired during background (but we already checked above, this is safety)
                 timerCompleted()
                 backgroundStartTime = nil
                 appSwitchDetected = false

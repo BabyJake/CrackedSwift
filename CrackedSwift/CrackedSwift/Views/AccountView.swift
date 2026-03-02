@@ -71,22 +71,11 @@ struct AccountView: View {
                         }
                         
                         VStack(alignment: .leading, spacing: 4) {
-                            // Tappable name with edit hint
-                            Button(action: {
-                                editedName = authManager.userProfile?.displayName ?? ""
-                                showingNameEdit = true
-                            }) {
-                                HStack(spacing: 6) {
-                                    Text(authManager.userProfile?.displayName ?? "Tap to set name")
-                                        .font(.title3)
-                                        .fontWeight(.semibold)
-                                        .foregroundColor(authManager.userProfile?.displayName != nil ? .white : .white.opacity(0.5))
-                                    
-                                    Image(systemName: "pencil")
-                                        .font(.caption)
-                                        .foregroundColor(.white.opacity(0.5))
-                                }
-                            }
+                            // Display name (read-only after initial setup)
+                            Text(authManager.userProfile?.displayName ?? "No name set")
+                                .font(.title3)
+                                .fontWeight(.semibold)
+                                .foregroundColor(authManager.userProfile?.displayName != nil ? .white : .white.opacity(0.5))
                             
                             if let email = authManager.userProfile?.email {
                                 Text(email)
@@ -230,15 +219,6 @@ struct AccountView: View {
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text("This will upload your current game data to iCloud, replacing any existing cloud save.")
-            }
-            .alert("Edit Display Name", isPresented: $showingNameEdit) {
-                TextField("Your name", text: $editedName)
-                Button("Save") {
-                    authManager.updateDisplayName(editedName)
-                }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("Enter the name you want others to see.")
             }
             .alert("Restore from iCloud?", isPresented: $showingRestoreConfirm) {
                 Button("Restore", role: .destructive) {

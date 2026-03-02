@@ -54,8 +54,8 @@ struct AccountPromptView: View {
                 } onCompletion: { result in
                     authManager.handleSignInResult(result)
                     if authManager.isSignedIn {
-                        authManager.hasSeenAccountPrompt = true
-                        // Restore account data (animals, coins, etc.) from cloud
+                        // Don't set hasSeenAccountPrompt yet — the display name prompt will do that
+                        // Restore account data from cloud
                         Task {
                             await CloudKitManager.shared.syncAfterSignIn()
                         }

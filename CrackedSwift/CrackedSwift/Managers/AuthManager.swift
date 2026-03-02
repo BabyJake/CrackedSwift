@@ -25,18 +25,28 @@ class AuthManager: ObservableObject {
         didSet { userDefaults.set(hasSeenAccountPrompt, forKey: accountPromptKey) }
     }
     
+    /// Whether the user has already chosen their one-time display name.
+    @Published var hasSetDisplayName: Bool {
+        didSet { userDefaults.set(hasSetDisplayName, forKey: displayNameSetKey) }
+    }
+    
+    /// True when the user just signed in and needs to pick a display name.
+    @Published var needsDisplayNamePrompt: Bool = false
+    
     // MARK: - Storage Keys
     
     private let keychainService = "com.cracked.auth"
     private let keychainAccountKey = "appleUserID"
     private let profileKey = "FaunaUserProfile"
     private let accountPromptKey = "FaunaHasSeenAccountPrompt"
+    private let displayNameSetKey = "FaunaHasSetDisplayName"
     private let userDefaults = UserDefaults.standard
     
     // MARK: - Init
     
     private init() {
         self.hasSeenAccountPrompt = userDefaults.bool(forKey: accountPromptKey)
+        self.hasSetDisplayName = userDefaults.bool(forKey: displayNameSetKey)
         loadProfile()
         listenForRevocation()
     }
@@ -125,6 +135,11 @@ class AuthManager: ObservableObject {
             self.authError = nil
             saveProfile(profile)
             
+            // If display name hasn't been set yet, prompt the user
+            if !self.hasSetDisplayName {
+                self.needsDisplayNamePrompt = true
+            }
+            
             print("[Auth] Signed in as: \(finalName ?? userID)")
             
         case .failure(let error):
@@ -139,13 +154,20 @@ class AuthManager: ObservableObject {
     
     // MARK: - Profile Updates
     
-    /// Allows the user to set or change their display name (since Apple only provides it once).
+    /// Sets the display name. Can only be called once (on the post-sign-in prompt).
     func updateDisplayName(_ name: String) {
         guard var profile = userProfile else { return }
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         profile.displayName = trimmed.isEmpty ? nil : trimmed
         self.userProfile = profile
         saveProfile(profile)
+    }
+    
+    /// Finalises the one-time display name choice.
+    func confirmDisplayName(_ name: String) {
+        updateDisplayName(name)
+        hasSetDisplayName = true
+        needsDisplayNamePrompt = false
     }
     
     // MARK: - Sign Out
@@ -158,8 +180,11 @@ class AuthManager: ObservableObject {
         isSignedIn = false
         userProfile = nil
         authError = nil
+        needsDisplayNamePrompt = false
         deleteUserIDFromKeychain()
         userDefaults.removeObject(forKey: profileKey)
+        userDefaults.removeObject(forKey: displayNameSetKey)
+        hasSetDisplayName = false
     }
     
     // MARK: - Revocation Listener
