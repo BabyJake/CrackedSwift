@@ -204,7 +204,7 @@ struct GameData: Codable {
         }
     }
     
-    struct AnimalInstance: Codable {
+    struct AnimalInstance: Codable, Identifiable {
         let id: String
         let animalName: String
         var gridPosition: GridPosition

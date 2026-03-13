@@ -174,7 +174,7 @@ struct LeaderboardTabView: View {
                         } else {
                             ScrollView {
                                 LazyVStack(spacing: 8) {
-                                    ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
+                                    ForEach(Array(entries.enumerated()), id: \.offset) { index, entry in
                                         LeaderboardRow(
                                             rank: index + 1,
                                             entry: entry,

@@ -122,7 +122,7 @@ struct LeaderboardView: View {
                         } else {
                             ScrollView {
                                 LazyVStack(spacing: 8) {
-                                    ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
+                                    ForEach(Array(entries.enumerated()), id: \.offset) { index, entry in
                                         LeaderboardRow(
                                             rank: index + 1,
                                             entry: entry,
@@ -365,6 +365,13 @@ struct AddFriendView: View {
                                 .font(.caption)
                                 .foregroundColor(.white.opacity(0.3))
                         }
+                        Spacer()
+                    } else if leaderboard.isSearching {
+                        Spacer()
+                        ProgressView()
+                            .tint(.white)
+                        Text("Searching...")
+                            .foregroundColor(.white.opacity(0.5))
                         Spacer()
                     } else if leaderboard.searchResults.isEmpty {
                         Spacer()

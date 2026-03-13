@@ -11,12 +11,13 @@ import UIKit
 struct SanctuaryView: View {
     private var gameData = GameDataManager.shared
     private var animalManager = AnimalManager.shared
-    private var gridManager = GridManager.shared
+    @StateObject private var gridManager = GridManager.shared
     
     @State private var selectedView = "All"
     @State private var visibleInstances: [GameData.AnimalInstance] = []
     @State private var gridSize: Int = 3
     @State private var showingStatistics = false
+    @State private var showingAnimalDetail: GameData.AnimalInstance? = nil
     
     // Auto-fit zoom/pan (no user gestures — avoids broken zoom behavior)
     @State private var zoomScale: CGFloat = 1.0
@@ -41,11 +42,48 @@ struct SanctuaryView: View {
                     .padding(.top, 20)
                     .zIndex(10)
                     
+                    // Drag instruction banner
+                    if gridManager.draggingInstanceId != nil {
+                        HStack(spacing: 8) {
+                            Image(systemName: "hand.draw.fill")
+                                .foregroundColor(.orange)
+                            
+                            Text(gridManager.targetGridPosition != nil
+                                 ? "Release to drop here"
+                                 : "Drag to a new square")
+                                .font(.subheadline)
+                                .foregroundColor(.white.opacity(0.85))
+                        }
+                        .padding(10)
+                        .frame(maxWidth: .infinity)
+                        .background(Color.orange.opacity(0.25))
+                        .cornerRadius(10)
+                        .padding(.horizontal)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                        .zIndex(10)
+                    }
+                    
                     // 2. Grid View Container (no user zoom/pan — auto-fit only)
                     GeometryReader { geometry in
                         GridView(
                             instances: visibleInstances,
-                            gridSize: effectiveGridSize
+                            gridSize: effectiveGridSize,
+                            draggingInstanceId: gridManager.draggingInstanceId,
+                            dragOffset: gridManager.dragOffset,
+                            targetGridPosition: gridManager.targetGridPosition,
+                            onAnimalTapped: { instance in
+                                showingAnimalDetail = instance
+                            },
+                            onDragChanged: { instance, translation in
+                                if gridManager.draggingInstanceId == nil {
+                                    gridManager.startDragging(instance.id)
+                                }
+                                gridManager.updateDrag(offset: translation, fromPosition: instance.gridPosition)
+                            },
+                            onDragEnded: { instance in
+                                gridManager.endDrag()
+                                updateVisibleInstances(skipReposition: false)
+                            }
                         )
                         .scaleEffect(zoomScale)
                         .offset(panOffset)
@@ -86,6 +124,9 @@ struct SanctuaryView: View {
                 }
                 .sheet(isPresented: $showingStatistics) {
                     StatisticsView()
+                }
+                .sheet(item: $showingAnimalDetail) { instance in
+                    AnimalDetailSheet(instance: instance)
                 }
                 .onAppear {
                     processPendingItems()
@@ -185,44 +226,96 @@ struct FilterButton: View {
 struct GridView: View {
     let instances: [GameData.AnimalInstance]
     let gridSize: Int
+    let draggingInstanceId: String?
+    let dragOffset: CGSize
+    let targetGridPosition: GameData.GridPosition?
+    var onAnimalTapped: ((GameData.AnimalInstance) -> Void)? = nil
+    var onDragChanged: ((GameData.AnimalInstance, CGSize) -> Void)? = nil
+    var onDragEnded: ((GameData.AnimalInstance) -> Void)? = nil
     
     private let tileWidth: CGFloat = 128
     private let tileHeight: CGFloat = 64
     
-    init(instances: [GameData.AnimalInstance], gridSize: Int) {
-        // Deduplicate by id to avoid ForEach crash on duplicate ids
+    init(instances: [GameData.AnimalInstance], gridSize: Int, draggingInstanceId: String? = nil, dragOffset: CGSize = .zero, targetGridPosition: GameData.GridPosition? = nil, onAnimalTapped: ((GameData.AnimalInstance) -> Void)? = nil, onDragChanged: ((GameData.AnimalInstance, CGSize) -> Void)? = nil, onDragEnded: ((GameData.AnimalInstance) -> Void)? = nil) {
         var seen = Set<String>()
         self.instances = instances.filter { !$0.id.isEmpty && seen.insert($0.id).inserted }
         self.gridSize = max(3, gridSize)
+        self.draggingInstanceId = draggingInstanceId
+        self.dragOffset = dragOffset
+        self.targetGridPosition = targetGridPosition
+        self.onAnimalTapped = onAnimalTapped
+        self.onDragChanged = onDragChanged
+        self.onDragEnded = onDragEnded
     }
     
     var body: some View {
         let halfSize = gridSize / 2
-        // Stable id per cell (x,y) so view identity doesn't change when grid size changes — avoids SwiftUI crash
         let cellPositions: [(id: String, x: Int, y: Int)] = (-halfSize..<(-halfSize + gridSize)).flatMap { x in
             (-halfSize..<(-halfSize + gridSize)).map { y in (id: "\(x)-\(y)", x: x, y: y) }
         }
         
         ZStack {
-            // 1. Draw Ground
+            // 1. Draw Ground + target highlight
             ForEach(cellPositions, id: \.id) { cell in
                 let pos = isometricToScreen(x: cell.x, y: cell.y)
                 let zIndex = Double(cell.x + cell.y)
+                let gridPos = GameData.GridPosition(x: cell.x, y: cell.y)
+                let isDropTarget = targetGridPosition == gridPos
                 
-                GrassTileView()
-                    .frame(width: tileWidth, height: tileHeight)
-                    .position(x: pos.x, y: pos.y)
-                    .zIndex(zIndex)
+                ZStack {
+                    GrassTileView()
+                    
+                    // Highlight the drop target tile
+                    if isDropTarget {
+                        Path { path in
+                            path.move(to: CGPoint(x: 64, y: 0))
+                            path.addLine(to: CGPoint(x: 128, y: 32))
+                            path.addLine(to: CGPoint(x: 64, y: 64))
+                            path.addLine(to: CGPoint(x: 0, y: 32))
+                            path.closeSubpath()
+                        }
+                        .fill(Color.orange.opacity(0.35))
+                        .allowsHitTesting(false)
+                    }
+                }
+                .frame(width: tileWidth, height: tileHeight)
+                .position(x: pos.x, y: pos.y)
+                .zIndex(zIndex)
             }
             
             // 2. Draw Animals/Graves
             ForEach(instances, id: \.id) { instance in
                 if !instance.id.isEmpty {
-                    AnimalInstanceView(instance: instance, tileWidth: tileWidth, tileHeight: tileHeight)
+                    let isDragging = draggingInstanceId == instance.id
+                    let currentDragOffset = isDragging ? dragOffset : .zero
+                    
+                    AnimalInstanceView(
+                        instance: instance,
+                        tileWidth: tileWidth,
+                        tileHeight: tileHeight,
+                        isDragging: isDragging,
+                        dragOffset: currentDragOffset
+                    )
+                    .gesture(
+                        DragGesture(minimumDistance: 10)
+                            .onChanged { value in
+                                onDragChanged?(instance, value.translation)
+                            }
+                            .onEnded { _ in
+                                onDragEnded?(instance)
+                            }
+                    )
+                    .simultaneousGesture(
+                        TapGesture().onEnded {
+                            if draggingInstanceId == nil {
+                                onAnimalTapped?(instance)
+                            }
+                        }
+                    )
                 }
             }
         }
-        .frame(width: 0, height: 0) // Center in parent
+        .frame(width: 0, height: 0)
     }
     
     private func isometricToScreen(x: Int, y: Int) -> CGPoint {
@@ -236,6 +329,8 @@ struct AnimalInstanceView: View {
     let instance: GameData.AnimalInstance
     let tileWidth: CGFloat
     let tileHeight: CGFloat
+    var isDragging: Bool = false
+    var dragOffset: CGSize = .zero
     
     var body: some View {
         let pos = isometricToScreen(x: instance.gridPosition.x, y: instance.gridPosition.y)
@@ -246,11 +341,9 @@ struct AnimalInstanceView: View {
         let spriteWidth: CGFloat = tileWidth * 0.55
         let spriteHeight: CGFloat = instance.isGrave ? tileHeight * 1.0 : spriteWidth
         
-        // Position sprite so its bottom "feet" sit at the tile's visual center (diamond center).
-        // .position() places the view's center, so shift up by half the sprite height.
-        let finalX = pos.x + CGFloat(animalOffset.x)
-        let finalY = pos.y - (spriteHeight / 2) + CGFloat(animalOffset.y)
-        let objectZIndex = Double(instance.gridPosition.x + instance.gridPosition.y) + 100.0
+        let finalX = pos.x + CGFloat(animalOffset.x) + dragOffset.width
+        let finalY = pos.y - (spriteHeight / 2) + CGFloat(animalOffset.y) + dragOffset.height
+        let objectZIndex = isDragging ? 500.0 : Double(instance.gridPosition.x + instance.gridPosition.y) + 100.0
         
         Group {
             if instance.isGrave {
@@ -261,6 +354,11 @@ struct AnimalInstanceView: View {
                     .frame(width: spriteWidth, height: spriteHeight)
             }
         }
+        // Drag visual feedback
+        .shadow(color: isDragging ? .black.opacity(0.4) : .clear, radius: isDragging ? 8 : 0, x: 0, y: isDragging ? 6 : 0)
+        .scaleEffect(isDragging ? 1.2 : 1.0)
+        .opacity(isDragging ? 0.9 : 1.0)
+        .animation(.spring(response: 0.25, dampingFraction: 0.7), value: isDragging)
         .position(x: finalX, y: finalY)
         .zIndex(objectZIndex)
     }
@@ -571,5 +669,153 @@ struct RarityRow: View {
                 .foregroundColor(.white)
         }
         .padding(.horizontal)
+    }
+}
+
+// MARK: - Animal Detail Sheet
+
+struct AnimalDetailSheet: View {
+    let instance: GameData.AnimalInstance
+    @Environment(\.dismiss) private var dismiss
+    
+    private var animalData: AnimalData? {
+        AnimalDatabase.getAnimalData(for: instance.animalName)
+    }
+    
+    private var rarityColor: Color {
+        if let data = animalData {
+            return AppColors.color(for: data.rarity)
+        }
+        return .gray
+    }
+    
+    var body: some View {
+        NavigationView {
+            ZStack {
+                AppColors.backgroundGreen
+                    .ignoresSafeArea()
+                
+                VStack(spacing: 24) {
+                    Spacer().frame(height: 20)
+                    
+                    // Large animal image
+                    ZStack {
+                        Circle()
+                            .fill(rarityColor.opacity(0.2))
+                            .frame(width: 200, height: 200)
+                        
+                        Circle()
+                            .stroke(rarityColor.opacity(0.4), lineWidth: 2)
+                            .frame(width: 200, height: 200)
+                        
+                        let imageName = AnimalDatabase.getImageName(for: instance.animalName)
+                        if let config = AnimationFrameDetector.getAnimationConfig(for: instance.animalName) {
+                            AnimatedSpriteView(
+                                baseName: instance.animalName,
+                                animationName: config.animationName,
+                                frameCount: config.frameCount,
+                                frameDuration: config.frameDuration,
+                                startFrame: config.startFrame,
+                                frameFormat: config.frameFormat
+                            )
+                            .frame(width: 140, height: 140)
+                        } else if UIImage(named: imageName) != nil {
+                            Image(imageName)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 140, height: 140)
+                        } else {
+                            Image(systemName: "pawprint.fill")
+                                .font(.system(size: 60))
+                                .foregroundColor(.white.opacity(0.5))
+                        }
+                    }
+                    
+                    // Animal name
+                    Text(instance.animalName)
+                        .font(.largeTitle.weight(.bold))
+                        .foregroundColor(.white)
+                    
+                    // Rarity badge
+                    if let data = animalData {
+                        Text(data.rarity.rawValue.capitalized)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 6)
+                            .background(rarityColor)
+                            .cornerRadius(20)
+                    }
+                    
+                    // Info cards
+                    VStack(spacing: 12) {
+                        if let eggType = instance.eggType {
+                            DetailInfoRow(icon: "oval.fill", label: "Egg", value: eggType.replacingOccurrences(of: "Egg", with: " Egg"))
+                        }
+                        
+                        DetailInfoRow(icon: "calendar", label: "Hatched", value: formattedDate)
+                        
+                        DetailInfoRow(icon: "mappin.circle.fill", label: "Position", value: "(\(instance.gridPosition.x), \(instance.gridPosition.y))")
+                    }
+                    .padding()
+                    .background(Color.white.opacity(0.1))
+                    .cornerRadius(16)
+                    .padding(.horizontal, 32)
+                    
+                    // Description
+                    if let data = animalData, let desc = data.description, !desc.isEmpty {
+                        Text(desc)
+                            .font(.body)
+                            .foregroundColor(.white.opacity(0.8))
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 32)
+                    }
+                    
+                    Spacer()
+                }
+            }
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(AppColors.backgroundGreen, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                    .foregroundColor(.white)
+                }
+            }
+        }
+    }
+    
+    private var formattedDate: String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return formatter.string(from: instance.hatchDate)
+    }
+}
+
+struct DetailInfoRow: View {
+    let icon: String
+    let label: String
+    let value: String
+    
+    var body: some View {
+        HStack {
+            Image(systemName: icon)
+                .foregroundColor(.white.opacity(0.6))
+                .frame(width: 24)
+            
+            Text(label)
+                .foregroundColor(.white.opacity(0.7))
+            
+            Spacer()
+            
+            Text(value)
+                .font(.subheadline.weight(.medium))
+                .foregroundColor(.white)
+        }
     }
 }

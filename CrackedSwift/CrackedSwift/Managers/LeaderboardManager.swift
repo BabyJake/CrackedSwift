@@ -21,6 +21,7 @@ class LeaderboardManager: ObservableObject {
     @Published var incomingRequests: [FriendRequest] = []
     @Published var outgoingRequests: [FriendRequest] = []
     @Published var isLoading: Bool = false
+    @Published var isSearching: Bool = false
     @Published var errorMessage: String?
     @Published var myUserID: String?
     @Published var searchResults: [LeaderboardEntry] = []
@@ -50,6 +51,7 @@ class LeaderboardManager: ObservableObject {
     /// Serial queue to prevent concurrent pushStats race conditions
     private var pushTask: Task<Void, Never>?
     private var pushDebounceTask: Task<Void, Never>?
+    private var searchDebounceTask: Task<Void, Never>?
     
     private init() {
         myUserID = UserDefaults.standard.string(forKey: userIDKey)
@@ -243,6 +245,7 @@ class LeaderboardManager: ObservableObject {
                 }
             }
             
+            entries = deduplicatedEntriesByUserID(entries)
             entries.sort { $0.animalsHatched > $1.animalsHatched }
             globalEntries = entries
             
@@ -284,6 +287,7 @@ class LeaderboardManager: ObservableObject {
                 }
             }
             
+            entries = deduplicatedEntriesByUserID(entries)
             entries.sort { $0.animalsHatched > $1.animalsHatched }
             friendEntries = entries
             
@@ -547,8 +551,31 @@ class LeaderboardManager: ObservableObject {
         let trimmed = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.count >= 2 else {
             searchResults = []
+            errorMessage = nil
+            isSearching = false
             return
         }
+        
+        // Debounce: cancel previous search, wait 300ms before firing
+        searchDebounceTask?.cancel()
+        let task = Task { [weak self] in
+            do {
+                try await Task.sleep(nanoseconds: 300_000_000)
+            } catch {
+                return
+            }
+            guard !Task.isCancelled else { return }
+            await self?.executeSearch(trimmed)
+        }
+        searchDebounceTask = task
+        // Don't await — let debounce handle it
+    }
+    
+    private func executeSearch(_ trimmed: String) async {
+        isSearching = true
+        errorMessage = nil
+        
+        print("🔍 [Leaderboard] Searching for: \"\(trimmed)\"")
         
         let predicate = NSPredicate(format: "displayName BEGINSWITH[c] %@", trimmed)
         let query = CKQuery(recordType: leaderboardRecordType, predicate: predicate)
@@ -567,12 +594,27 @@ class LeaderboardManager: ObservableObject {
                 }
             }
             
+            entries = deduplicatedEntriesByUserID(entries)
             searchResults = entries
+            print("🔍 [Leaderboard] Found \(entries.count) results for \"\(trimmed)\"")
+            
+            if entries.isEmpty {
+                print("🔍 [Leaderboard] No results — friend may not have opened the app yet (no Leaderboard record)")
+            }
             
         } catch {
-            print("[Leaderboard] Search failed: \(error)")
+            print("❌ [Leaderboard] Search failed: \(error)")
             searchResults = []
+            
+            let desc = error.localizedDescription
+            if desc.contains("index") || desc.contains("QUERY") || desc.contains("Field") {
+                errorMessage = "CloudKit index missing for displayName. See CloudKitSchemaSeeder.swift for required indexes."
+            } else {
+                errorMessage = "Search failed: \(desc)"
+            }
         }
+        
+        isSearching = false
     }
     
     private func lookupUserByUsername(_ username: String) async -> (String, String)? {
@@ -597,6 +639,22 @@ class LeaderboardManager: ObservableObject {
     }
     
     // MARK: - Helpers
+
+    private func deduplicatedEntriesByUserID(_ entries: [LeaderboardEntry]) -> [LeaderboardEntry] {
+        var bestByUserID: [String: LeaderboardEntry] = [:]
+
+        for entry in entries {
+            if let existing = bestByUserID[entry.id] {
+                if entry.lastUpdated > existing.lastUpdated {
+                    bestByUserID[entry.id] = entry
+                }
+            } else {
+                bestByUserID[entry.id] = entry
+            }
+        }
+
+        return Array(bestByUserID.values)
+    }
     
     private func safeInt(_ value: Any?) -> Int {
         if let i = value as? Int { return i }

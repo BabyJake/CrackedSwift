@@ -20,6 +20,102 @@ class GridManager: ObservableObject {
     private var gridSize: Int = 3
     private let minGridSize: Int = 3
     
+    // MARK: - Drag & Drop Movement
+    
+    /// The id of the animal instance currently being dragged
+    @Published var draggingInstanceId: String? = nil
+    /// The current drag offset in grid-local screen coordinates
+    @Published var dragOffset: CGSize = .zero
+    /// The grid cell the dragged animal would land on (computed from drag offset)
+    @Published var targetGridPosition: GameData.GridPosition? = nil
+    
+    private let tileWidthForCalc: CGFloat = 128
+    private let tileHeightForCalc: CGFloat = 64
+    
+    func startDragging(_ instanceId: String) {
+        draggingInstanceId = instanceId
+        dragOffset = .zero
+        targetGridPosition = nil
+        print("🦁 Started dragging instance: \(instanceId)")
+    }
+    
+    func updateDrag(offset: CGSize, fromPosition: GameData.GridPosition) {
+        dragOffset = offset
+        
+        // Convert screen-space drag offset to isometric grid delta
+        let dx = offset.width
+        let dy = offset.height
+        let gridDeltaX = Int(round((dx / (tileWidthForCalc / 2) + dy / (tileHeightForCalc / 2)) / 2))
+        let gridDeltaY = Int(round((dy / (tileHeightForCalc / 2) - dx / (tileWidthForCalc / 2)) / 2))
+        
+        let target = GameData.GridPosition(x: fromPosition.x + gridDeltaX, y: fromPosition.y + gridDeltaY)
+        
+        if isPositionInGrid(target) && target != fromPosition {
+            targetGridPosition = target
+        } else {
+            targetGridPosition = nil
+        }
+    }
+    
+    func endDrag() {
+        guard let fromId = draggingInstanceId,
+              let target = targetGridPosition else {
+            resetDrag()
+            return
+        }
+        
+        let instances = dataManager.getAnimalInstances()
+        guard instances.first(where: { $0.id == fromId }) != nil else {
+            resetDrag()
+            return
+        }
+        
+        // Check if target is occupied — swap or move
+        if let targetInstance = instances.first(where: { $0.gridPosition == target }) {
+            swapAnimalPositions(fromId: fromId, toId: targetInstance.id)
+        } else {
+            moveAnimal(id: fromId, to: target)
+        }
+        
+        resetDrag()
+    }
+    
+    func cancelDrag() {
+        resetDrag()
+    }
+    
+    private func resetDrag() {
+        draggingInstanceId = nil
+        dragOffset = .zero
+        targetGridPosition = nil
+    }
+    
+    private func moveAnimal(id: String, to position: GameData.GridPosition) {
+        dataManager.updateAnimalInstancePosition(id, position: position)
+        dataManager.setOriginalPosition(id, position: position)
+        print("🦁 ✅ Moved animal to (\(position.x), \(position.y))")
+    }
+    
+    private func swapAnimalPositions(fromId: String, toId: String) {
+        let instances = dataManager.getAnimalInstances()
+        guard let fromInstance = instances.first(where: { $0.id == fromId }),
+              let toInstance = instances.first(where: { $0.id == toId }) else { return }
+        
+        let fromPos = fromInstance.gridPosition
+        let toPos = toInstance.gridPosition
+        
+        dataManager.updateAnimalInstancePosition(fromId, position: toPos)
+        dataManager.updateAnimalInstancePosition(toId, position: fromPos)
+        dataManager.setOriginalPosition(fromId, position: toPos)
+        dataManager.setOriginalPosition(toId, position: fromPos)
+        
+        print("🦁 ✅ Swapped \(fromInstance.animalName) ↔ \(toInstance.animalName)")
+    }
+    
+    func clearSelection() {
+        resetDrag()
+    }
+    
     // MARK: - Grid Management
     
     func getGridSize() -> Int {
