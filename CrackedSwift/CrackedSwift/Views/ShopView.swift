@@ -65,6 +65,7 @@ struct ShopItemRow: View {
     @StateObject private var gameData = GameDataManager.shared
     @State private var showingPurchaseAlert = false
     @State private var purchaseSuccess = false
+    @State private var showingEggContents = false
     
     var canAfford: Bool {
         shopManager.canAffordEgg(egg)
@@ -76,7 +77,7 @@ struct ShopItemRow: View {
     
     var body: some View {
         HStack {
-            // Egg image - use imageName from egg model
+            // Egg image - tap to see contents
             Group {
                 if UIImage(named: egg.imageName) != nil {
                     Image(egg.imageName)
@@ -89,6 +90,7 @@ struct ShopItemRow: View {
                         .foregroundColor(.white.opacity(0.8))
                 }
             }
+            .onTapGesture { showingEggContents = true }
             .padding(.trailing, 12)
             
             VStack(alignment: .leading, spacing: 8) {
@@ -140,6 +142,9 @@ struct ShopItemRow: View {
                 message: Text(purchaseSuccess ? "You purchased \(egg.title)" : "You need \(egg.baseCost - gameData.getTotalCoins()) more coins"),
                 dismissButton: .default(Text("OK"))
             )
+        }
+        .sheet(isPresented: $showingEggContents) {
+            EggContentsView(egg: egg)
         }
     }
 }

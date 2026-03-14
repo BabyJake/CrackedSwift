@@ -25,41 +25,94 @@ struct SanctuaryView: View {
     
     var body: some View {
         ZStack {
-            AppColors.backgroundGreen
-                .ignoresSafeArea()
+            // Layered nature background
+            LinearGradient(
+                colors: [
+                    Color(hex: "#2D5A3F"),
+                    Color(hex: "#3D7A5F"),
+                    Color(hex: "#4A8B6E")
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
             
             NavigationView {
                 VStack(spacing: 0) {
-                    // 1. Filter Buttons
-                    HStack(spacing: 10) {
-                        FilterButton(title: "All", selection: $selectedView)
-                        FilterButton(title: "Day", selection: $selectedView)
-                        FilterButton(title: "Week", selection: $selectedView)
-                        FilterButton(title: "Month", selection: $selectedView)
-                        FilterButton(title: "Year", selection: $selectedView)
+                    // Animal count header
+                    HStack {
+                        let animalCount = visibleInstances.filter { !$0.isGrave }.count
+                        let graveCount = visibleInstances.filter { $0.isGrave }.count
+                        
+                        HStack(spacing: 6) {
+                            Image(systemName: "leaf.fill")
+                                .font(.system(size: 12))
+                                .foregroundColor(Color(hex: "#8BC49E"))
+                            Text("\(animalCount) creature\(animalCount == 1 ? "" : "s")")
+                                .font(.system(size: 13, weight: .medium, design: .rounded))
+                                .foregroundColor(.white.opacity(0.7))
+                        }
+                        
+                        if graveCount > 0 {
+                            Text("\u{00B7}")
+                                .foregroundColor(.white.opacity(0.3))
+                            HStack(spacing: 4) {
+                                Image(systemName: "xmark.circle")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(.white.opacity(0.4))
+                                Text("\(graveCount)")
+                                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                                    .foregroundColor(.white.opacity(0.5))
+                            }
+                        }
+                        
+                        Spacer()
                     }
-                    .padding()
-                    .padding(.top, 20)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 8)
+                    .padding(.bottom, 4)
+                    
+                    // Filter pills
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(["All", "Day", "Week", "Month", "Year"], id: \.self) { filter in
+                                FilterPill(title: filter, isSelected: selectedView == filter) {
+                                    withAnimation(.easeInOut(duration: 0.2)) {
+                                        selectedView = filter
+                                    }
+                                }
+                            }
+                        }
+                        .padding(.horizontal, 20)
+                    }
+                    .padding(.bottom, 8)
                     .zIndex(10)
                     
                     // Drag instruction banner
                     if gridManager.draggingInstanceId != nil {
                         HStack(spacing: 8) {
-                            Image(systemName: "hand.draw.fill")
-                                .foregroundColor(.orange)
+                            Image(systemName: "wind")
+                                .font(.system(size: 14))
+                                .foregroundColor(Color(hex: "#F4D9A0"))
                             
                             Text(gridManager.targetGridPosition != nil
-                                 ? "Release to drop here"
-                                 : "Drag to a new square")
-                                .font(.subheadline)
-                                .foregroundColor(.white.opacity(0.85))
+                                 ? "Release to place here"
+                                 : "Slide to a new patch")
+                                .font(.system(size: 14, weight: .medium, design: .rounded))
+                                .foregroundColor(.white.opacity(0.9))
                         }
-                        .padding(10)
-                        .frame(maxWidth: .infinity)
-                        .background(Color.orange.opacity(0.25))
-                        .cornerRadius(10)
+                        .padding(.vertical, 8)
+                        .padding(.horizontal, 16)
+                        .background(
+                            Capsule()
+                                .fill(Color.black.opacity(0.25))
+                        )
+                        .overlay(
+                            Capsule()
+                                .stroke(Color(hex: "#F4D9A0").opacity(0.3), lineWidth: 1)
+                        )
                         .padding(.horizontal)
-                        .transition(.move(edge: .top).combined(with: .opacity))
+                        .transition(.opacity.combined(with: .scale(scale: 0.9)))
                         .zIndex(10)
                     }
                     
@@ -107,10 +160,16 @@ struct SanctuaryView: View {
                         }
                     }
                 }
-                .background(AppColors.backgroundGreen)
+                .background(
+                    LinearGradient(
+                        colors: [Color(hex: "#2D5A3F"), Color(hex: "#3D7A5F"), Color(hex: "#4A8B6E")],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
                 .navigationTitle("Sanctuary")
                 .navigationBarTitleDisplayMode(.inline)
-                .toolbarBackground(AppColors.backgroundGreen, for: .navigationBar)
+                .toolbarBackground(Color(hex: "#2D5A3F"), for: .navigationBar)
                 .toolbarBackground(.visible, for: .navigationBar)
                 .toolbar {
                     ToolbarItem(placement: .navigationBarTrailing) {
@@ -118,7 +177,8 @@ struct SanctuaryView: View {
                             showingStatistics = true
                         }) {
                             Image(systemName: "chart.bar.fill")
-                                .foregroundColor(.white)
+                                .font(.system(size: 15))
+                                .foregroundColor(Color(hex: "#8BC49E"))
                         }
                     }
                 }
@@ -198,27 +258,26 @@ struct SanctuaryView: View {
 
 // --- SUBVIEWS (Must be OUTSIDE SanctuaryView) ---
 
-struct FilterButton: View {
+struct FilterPill: View {
     let title: String
-    @Binding var selection: String
-    
-    var isSelected: Bool {
-        selection == title
-    }
+    let isSelected: Bool
+    let action: () -> Void
     
     var body: some View {
-        Button(action: {
-            withAnimation {
-                selection = title
-            }
-        }) {
+        Button(action: action) {
             Text(title)
-                .font(.subheadline)
-                .foregroundColor(isSelected ? .white : .white.opacity(0.7))
+                .font(.system(size: 14, weight: isSelected ? .semibold : .regular, design: .rounded))
+                .foregroundColor(isSelected ? Color(hex: "#2D5A3F") : .white.opacity(0.6))
                 .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(isSelected ? AppColors.buttonGreen : AppColors.backgroundGreen.opacity(0.6))
-                .cornerRadius(8)
+                .padding(.vertical, 7)
+                .background(
+                    Capsule()
+                        .fill(isSelected ? Color(hex: "#A8E6C3") : Color.white.opacity(0.08))
+                )
+                .overlay(
+                    Capsule()
+                        .stroke(isSelected ? Color.clear : Color.white.opacity(0.12), lineWidth: 1)
+                )
         }
     }
 }
@@ -274,7 +333,24 @@ struct GridView: View {
                             path.addLine(to: CGPoint(x: 0, y: 32))
                             path.closeSubpath()
                         }
-                        .fill(Color.orange.opacity(0.35))
+                        .fill(
+                            RadialGradient(
+                                colors: [Color(hex: "#A8E6C3").opacity(0.5), Color(hex: "#6ECB9B").opacity(0.15)],
+                                center: .center,
+                                startRadius: 0,
+                                endRadius: 40
+                            )
+                        )
+                        .overlay(
+                            Path { path in
+                                path.move(to: CGPoint(x: 64, y: 0))
+                                path.addLine(to: CGPoint(x: 128, y: 32))
+                                path.addLine(to: CGPoint(x: 64, y: 64))
+                                path.addLine(to: CGPoint(x: 0, y: 32))
+                                path.closeSubpath()
+                            }
+                            .stroke(Color(hex: "#A8E6C3").opacity(0.6), lineWidth: 1.5)
+                        )
                         .allowsHitTesting(false)
                     }
                 }
@@ -297,12 +373,28 @@ struct GridView: View {
                         dragOffset: currentDragOffset
                     )
                     .gesture(
-                        DragGesture(minimumDistance: 10)
+                        LongPressGesture(minimumDuration: 0.3)
+                            .sequenced(before: DragGesture(minimumDistance: 0))
                             .onChanged { value in
-                                onDragChanged?(instance, value.translation)
+                                switch value {
+                                case .second(true, let drag):
+                                    if let drag = drag {
+                                        if draggingInstanceId == nil {
+                                            onDragChanged?(instance, .zero)
+                                        }
+                                        onDragChanged?(instance, drag.translation)
+                                    }
+                                default:
+                                    break
+                                }
                             }
-                            .onEnded { _ in
-                                onDragEnded?(instance)
+                            .onEnded { value in
+                                switch value {
+                                case .second(true, _):
+                                    onDragEnded?(instance)
+                                default:
+                                    break
+                                }
                             }
                     )
                     .simultaneousGesture(
@@ -355,9 +447,10 @@ struct AnimalInstanceView: View {
             }
         }
         // Drag visual feedback
-        .shadow(color: isDragging ? .black.opacity(0.4) : .clear, radius: isDragging ? 8 : 0, x: 0, y: isDragging ? 6 : 0)
-        .scaleEffect(isDragging ? 1.2 : 1.0)
-        .opacity(isDragging ? 0.9 : 1.0)
+        .shadow(color: isDragging ? Color(hex: "#2D5A3F").opacity(0.5) : .clear, radius: isDragging ? 10 : 0, x: 0, y: isDragging ? 8 : 0)
+        .scaleEffect(isDragging ? 1.15 : 1.0)
+        .opacity(isDragging ? 0.95 : 1.0)
+        .rotation3DEffect(.degrees(isDragging ? 2 : 0), axis: (x: 0, y: 1, z: 0))
         .animation(.spring(response: 0.25, dampingFraction: 0.7), value: isDragging)
         .position(x: finalX, y: finalY)
         .zIndex(objectZIndex)
@@ -480,64 +573,83 @@ struct StatisticsView: View {
     var body: some View {
         NavigationView {
             ZStack {
-                AppColors.backgroundGreen
-                    .ignoresSafeArea()
+                LinearGradient(
+                    colors: [Color(hex: "#2D5A3F"), Color(hex: "#3D7A5F")],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .ignoresSafeArea()
                 
                 ScrollView {
-                    VStack(spacing: 24) {
-                        // Total Stats Section
-                        StatCard(title: "Total Coins", value: "\(gameData.getTotalCoins())", icon: "circle.fill", color: AppColors.coinGold)
-                        
-                        StatCard(title: "Total Animals", value: "\(totalAnimals)", icon: "pawprint.fill", color: .white)
-                        
-                        StatCard(title: "Total Graves", value: "\(totalGraves)", icon: "cross.fill", color: .gray)
-                        
-                        // Hatch Statistics Section
-                        VStack(alignment: .leading, spacing: 16) {
-                            Text("Hatch Statistics")
-                                .font(.title2)
-                                .fontWeight(.bold)
-                                .foregroundColor(.white)
-                                .padding(.horizontal)
-                            
-                            StatRow(title: "Today", value: "\(gameData.getDailyHatchCount())")
-                            StatRow(title: "This Week", value: "\(gameData.getWeeklyHatchCount())")
-                            StatRow(title: "This Month", value: "\(gameData.getMonthlyHatchCount())")
-                            StatRow(title: "This Year", value: "\(gameData.getYearlyHatchCount())")
+                    VStack(spacing: 16) {
+                        // Summary row
+                        HStack(spacing: 12) {
+                            MiniStatBubble(icon: "leaf.fill", value: "\(totalAnimals)", label: "Animals", tint: Color(hex: "#A8E6C3"))
+                            MiniStatBubble(icon: "circle.fill", value: "\(gameData.getTotalCoins())", label: "Coins", tint: AppColors.coinGold)
+                            MiniStatBubble(icon: "xmark.circle", value: "\(totalGraves)", label: "Graves", tint: Color.white.opacity(0.5))
                         }
-                        .padding()
-                        .background(Color.white.opacity(0.1))
-                        .cornerRadius(12)
                         .padding(.horizontal)
                         
-                        // Rarity Breakdown Section
-                        VStack(alignment: .leading, spacing: 16) {
-                            Text("Animals by Rarity")
-                                .font(.title2)
-                                .fontWeight(.bold)
-                                .foregroundColor(.white)
-                                .padding(.horizontal)
-                            
-                            RarityRow(rarity: "Common", count: rarityCounts[.common] ?? 0, color: .gray)
-                            RarityRow(rarity: "Uncommon", count: rarityCounts[.uncommon] ?? 0, color: .green)
-                            RarityRow(rarity: "Rare", count: rarityCounts[.rare] ?? 0, color: .blue)
-                            RarityRow(rarity: "Epic", count: rarityCounts[.epic] ?? 0, color: .purple)
-                            RarityRow(rarity: "Legendary", count: rarityCounts[.legendary] ?? 0, color: .yellow)
-                            RarityRow(rarity: "Mythic", count: rarityCounts[.mythic] ?? 0, color: .orange)
+                        // Hatch Statistics
+                        NatureCard {
+                            VStack(alignment: .leading, spacing: 14) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "bird.fill")
+                                        .foregroundColor(Color(hex: "#A8E6C3"))
+                                        .font(.system(size: 14))
+                                    Text("Hatch History")
+                                        .font(.system(size: 16, weight: .semibold, design: .rounded))
+                                        .foregroundColor(.white)
+                                }
+                                
+                                NatureStatRow(label: "Today", value: "\(gameData.getDailyHatchCount())")
+                                NatureStatRow(label: "This Week", value: "\(gameData.getWeeklyHatchCount())")
+                                NatureStatRow(label: "This Month", value: "\(gameData.getMonthlyHatchCount())")
+                                NatureStatRow(label: "This Year", value: "\(gameData.getYearlyHatchCount())")
+                            }
                         }
-                        .padding()
-                        .background(Color.white.opacity(0.1))
-                        .cornerRadius(12)
-                        .padding(.horizontal)
                         
-                        // Total Study Time
+                        // Rarity Breakdown
+                        NatureCard {
+                            VStack(alignment: .leading, spacing: 14) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "sparkles")
+                                        .foregroundColor(Color(hex: "#F4D9A0"))
+                                        .font(.system(size: 14))
+                                    Text("By Rarity")
+                                        .font(.system(size: 16, weight: .semibold, design: .rounded))
+                                        .foregroundColor(.white)
+                                }
+                                
+                                NatureRarityRow(rarity: "Common", count: rarityCounts[.common] ?? 0, color: Color.white.opacity(0.5))
+                                NatureRarityRow(rarity: "Uncommon", count: rarityCounts[.uncommon] ?? 0, color: Color(hex: "#8BC49E"))
+                                NatureRarityRow(rarity: "Rare", count: rarityCounts[.rare] ?? 0, color: Color(hex: "#6BA3D6"))
+                                NatureRarityRow(rarity: "Epic", count: rarityCounts[.epic] ?? 0, color: Color(hex: "#B48CD6"))
+                                NatureRarityRow(rarity: "Legendary", count: rarityCounts[.legendary] ?? 0, color: Color(hex: "#F4D9A0"))
+                                NatureRarityRow(rarity: "Mythic", count: rarityCounts[.mythic] ?? 0, color: Color(hex: "#F4A66A"))
+                            }
+                        }
+                        
+                        // Study Time
                         if totalStudyTimeSeconds > 0 {
-                            StatCard(
-                                title: "Total Study Time",
-                                value: formattedStudyTime,
-                                icon: "clock.fill",
-                                color: AppColors.buttonGreen
-                            )
+                            NatureCard {
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        HStack(spacing: 6) {
+                                            Image(systemName: "clock.fill")
+                                                .foregroundColor(Color(hex: "#A8E6C3"))
+                                                .font(.system(size: 14))
+                                            Text("Total Focus Time")
+                                                .font(.system(size: 16, weight: .semibold, design: .rounded))
+                                                .foregroundColor(.white)
+                                        }
+                                        Text(formattedStudyTime)
+                                            .font(.system(size: 28, weight: .bold, design: .rounded))
+                                            .foregroundColor(Color(hex: "#A8E6C3"))
+                                    }
+                                    Spacer()
+                                }
+                            }
                         }
                     }
                     .padding(.vertical)
@@ -545,14 +657,15 @@ struct StatisticsView: View {
             }
             .navigationTitle("Statistics")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(AppColors.backgroundGreen, for: .navigationBar)
+            .toolbarBackground(Color(hex: "#2D5A3F"), for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Done") {
                         dismiss()
                     }
-                    .foregroundColor(.white)
+                    .font(.system(size: 15, weight: .medium, design: .rounded))
+                    .foregroundColor(Color(hex: "#A8E6C3"))
                 }
             }
         }
@@ -598,77 +711,92 @@ struct StatisticsView: View {
     }
 }
 
-struct StatCard: View {
-    let title: String
-    let value: String
+// MARK: - Nature-Themed Stat Components
+
+struct MiniStatBubble: View {
     let icon: String
-    let color: Color
+    let value: String
+    let label: String
+    let tint: Color
     
     var body: some View {
-        HStack {
+        VStack(spacing: 6) {
             Image(systemName: icon)
-                .font(.system(size: 24))
-                .foregroundColor(color)
-                .frame(width: 40)
-            
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                    .font(.subheadline)
-                    .foregroundColor(.white.opacity(0.7))
-                
-                Text(value)
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .foregroundColor(.white)
-            }
-            
-            Spacer()
+                .font(.system(size: 16))
+                .foregroundColor(tint)
+            Text(value)
+                .font(.system(size: 22, weight: .bold, design: .rounded))
+                .foregroundColor(.white)
+            Text(label)
+                .font(.system(size: 11, weight: .medium, design: .rounded))
+                .foregroundColor(.white.opacity(0.5))
         }
-        .padding()
-        .background(Color.white.opacity(0.1))
-        .cornerRadius(12)
-        .padding(.horizontal)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 14)
+        .background(Color.white.opacity(0.06))
+        .cornerRadius(14)
+        .overlay(
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(Color.white.opacity(0.06), lineWidth: 1)
+        )
     }
 }
 
-struct StatRow: View {
-    let title: String
+struct NatureCard<Content: View>: View {
+    @ViewBuilder let content: Content
+    
+    var body: some View {
+        content
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.white.opacity(0.06))
+            .cornerRadius(16)
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(Color.white.opacity(0.06), lineWidth: 1)
+            )
+            .padding(.horizontal)
+    }
+}
+
+struct NatureStatRow: View {
+    let label: String
     let value: String
     
     var body: some View {
         HStack {
-            Text(title)
-                .foregroundColor(.white.opacity(0.8))
+            Text(label)
+                .font(.system(size: 14, design: .rounded))
+                .foregroundColor(.white.opacity(0.6))
             Spacer()
             Text(value)
-                .font(.headline)
+                .font(.system(size: 15, weight: .semibold, design: .rounded))
                 .foregroundColor(.white)
         }
-        .padding(.horizontal)
     }
 }
 
-struct RarityRow: View {
+struct NatureRarityRow: View {
     let rarity: String
     let count: Int
     let color: Color
     
     var body: some View {
-        HStack {
+        HStack(spacing: 10) {
             Circle()
                 .fill(color)
-                .frame(width: 12, height: 12)
+                .frame(width: 8, height: 8)
             
             Text(rarity)
-                .foregroundColor(.white.opacity(0.8))
+                .font(.system(size: 14, design: .rounded))
+                .foregroundColor(.white.opacity(0.7))
             
             Spacer()
             
             Text("\(count)")
-                .font(.headline)
+                .font(.system(size: 15, weight: .semibold, design: .rounded))
                 .foregroundColor(.white)
         }
-        .padding(.horizontal)
     }
 }
 
@@ -692,98 +820,117 @@ struct AnimalDetailSheet: View {
     var body: some View {
         NavigationView {
             ZStack {
-                AppColors.backgroundGreen
-                    .ignoresSafeArea()
+                LinearGradient(
+                    colors: [Color(hex: "#2D5A3F"), Color(hex: "#3D7A5F")],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .ignoresSafeArea()
                 
-                VStack(spacing: 24) {
-                    Spacer().frame(height: 20)
-                    
-                    // Large animal image
-                    ZStack {
-                        Circle()
-                            .fill(rarityColor.opacity(0.2))
-                            .frame(width: 200, height: 200)
+                ScrollView {
+                    VStack(spacing: 24) {
+                        Spacer().frame(height: 8)
                         
-                        Circle()
-                            .stroke(rarityColor.opacity(0.4), lineWidth: 2)
-                            .frame(width: 200, height: 200)
-                        
-                        let imageName = AnimalDatabase.getImageName(for: instance.animalName)
-                        if let config = AnimationFrameDetector.getAnimationConfig(for: instance.animalName) {
-                            AnimatedSpriteView(
-                                baseName: instance.animalName,
-                                animationName: config.animationName,
-                                frameCount: config.frameCount,
-                                frameDuration: config.frameDuration,
-                                startFrame: config.startFrame,
-                                frameFormat: config.frameFormat
-                            )
-                            .frame(width: 140, height: 140)
-                        } else if UIImage(named: imageName) != nil {
-                            Image(imageName)
-                                .resizable()
-                                .scaledToFit()
+                        // Large animal image
+                        ZStack {
+                            // Organic ring
+                            Circle()
+                                .fill(
+                                    RadialGradient(
+                                        colors: [rarityColor.opacity(0.15), rarityColor.opacity(0.03)],
+                                        center: .center,
+                                        startRadius: 40,
+                                        endRadius: 110
+                                    )
+                                )
+                                .frame(width: 220, height: 220)
+                            
+                            Circle()
+                                .stroke(rarityColor.opacity(0.25), lineWidth: 1.5)
+                                .frame(width: 200, height: 200)
+                            
+                            let imageName = AnimalDatabase.getImageName(for: instance.animalName)
+                            if let config = AnimationFrameDetector.getAnimationConfig(for: instance.animalName) {
+                                AnimatedSpriteView(
+                                    baseName: instance.animalName,
+                                    animationName: config.animationName,
+                                    frameCount: config.frameCount,
+                                    frameDuration: config.frameDuration,
+                                    startFrame: config.startFrame,
+                                    frameFormat: config.frameFormat
+                                )
                                 .frame(width: 140, height: 140)
-                        } else {
-                            Image(systemName: "pawprint.fill")
-                                .font(.system(size: 60))
-                                .foregroundColor(.white.opacity(0.5))
+                            } else if UIImage(named: imageName) != nil {
+                                Image(imageName)
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: 140, height: 140)
+                            } else {
+                                Image(systemName: "pawprint.fill")
+                                    .font(.system(size: 60))
+                                    .foregroundColor(.white.opacity(0.3))
+                            }
                         }
-                    }
-                    
-                    // Animal name
-                    Text(instance.animalName)
-                        .font(.largeTitle.weight(.bold))
-                        .foregroundColor(.white)
-                    
-                    // Rarity badge
-                    if let data = animalData {
-                        Text(data.rarity.rawValue.capitalized)
-                            .font(.subheadline.weight(.semibold))
+                        
+                        // Animal name
+                        Text(instance.animalName)
+                            .font(.system(size: 28, weight: .bold, design: .rounded))
                             .foregroundColor(.white)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 6)
-                            .background(rarityColor)
-                            .cornerRadius(20)
-                    }
-                    
-                    // Info cards
-                    VStack(spacing: 12) {
-                        if let eggType = instance.eggType {
-                            DetailInfoRow(icon: "oval.fill", label: "Egg", value: eggType.replacingOccurrences(of: "Egg", with: " Egg"))
+                        
+                        // Rarity badge
+                        if let data = animalData {
+                            Text(data.rarity.rawValue.capitalized)
+                                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                                .foregroundColor(rarityColor)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 5)
+                                .background(
+                                    Capsule()
+                                        .fill(rarityColor.opacity(0.15))
+                                )
+                                .overlay(
+                                    Capsule()
+                                        .stroke(rarityColor.opacity(0.3), lineWidth: 1)
+                                )
                         }
                         
-                        DetailInfoRow(icon: "calendar", label: "Hatched", value: formattedDate)
+                        // Info card
+                        NatureCard {
+                            VStack(spacing: 12) {
+                                if let eggType = instance.eggType {
+                                    DetailInfoRow(icon: "oval.fill", label: "Egg", value: eggType.replacingOccurrences(of: "Egg", with: " Egg"))
+                                }
+                                
+                                DetailInfoRow(icon: "calendar", label: "Hatched", value: formattedDate)
+                                
+                                DetailInfoRow(icon: "mappin.circle.fill", label: "Position", value: "(\(instance.gridPosition.x), \(instance.gridPosition.y))")
+                            }
+                        }
                         
-                        DetailInfoRow(icon: "mappin.circle.fill", label: "Position", value: "(\(instance.gridPosition.x), \(instance.gridPosition.y))")
+                        // Description
+                        if let data = animalData, let desc = data.description, !desc.isEmpty {
+                            Text(desc)
+                                .font(.system(size: 15, design: .rounded))
+                                .foregroundColor(.white.opacity(0.6))
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, 32)
+                        }
+                        
+                        Spacer()
                     }
-                    .padding()
-                    .background(Color.white.opacity(0.1))
-                    .cornerRadius(16)
-                    .padding(.horizontal, 32)
-                    
-                    // Description
-                    if let data = animalData, let desc = data.description, !desc.isEmpty {
-                        Text(desc)
-                            .font(.body)
-                            .foregroundColor(.white.opacity(0.8))
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 32)
-                    }
-                    
-                    Spacer()
                 }
             }
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(AppColors.backgroundGreen, for: .navigationBar)
+            .toolbarBackground(Color(hex: "#2D5A3F"), for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Done") {
                         dismiss()
                     }
-                    .foregroundColor(.white)
+                    .font(.system(size: 15, weight: .medium, design: .rounded))
+                    .foregroundColor(Color(hex: "#A8E6C3"))
                 }
             }
         }
@@ -805,17 +952,19 @@ struct DetailInfoRow: View {
     var body: some View {
         HStack {
             Image(systemName: icon)
-                .foregroundColor(.white.opacity(0.6))
-                .frame(width: 24)
+                .font(.system(size: 13))
+                .foregroundColor(Color(hex: "#A8E6C3").opacity(0.7))
+                .frame(width: 22)
             
             Text(label)
-                .foregroundColor(.white.opacity(0.7))
+                .font(.system(size: 14, design: .rounded))
+                .foregroundColor(.white.opacity(0.5))
             
             Spacer()
             
             Text(value)
-                .font(.subheadline.weight(.medium))
-                .foregroundColor(.white)
+                .font(.system(size: 14, weight: .medium, design: .rounded))
+                .foregroundColor(.white.opacity(0.9))
         }
     }
 }
