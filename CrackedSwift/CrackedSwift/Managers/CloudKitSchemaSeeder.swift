@@ -5,29 +5,34 @@
 //  Run ONCE to create all CloudKit record types + fields in Development.
 //  After running, go to CloudKit Dashboard → Schema → Indexes and add:
 //
-//  ┌─────────────────┬──────────────────┬────────────┬──────────┐
-//  │ Record Type      │ Field            │ Queryable  │ Sortable │
-//  ├─────────────────┼──────────────────┼────────────┼──────────┤
-//  │ Leaderboard      │ recordName       │ ✅         │          │
-//  │ Leaderboard      │ userID           │ ✅         │          │
-//  │ Leaderboard      │ displayName      │ ✅         │          │
-//  │ Leaderboard      │ animalsHatched   │ ✅         │ ✅       │
-//  │ Leaderboard      │ totalStudyTime   │ ✅         │ ✅       │
-//  │ Leaderboard      │ totalCoins       │ ✅         │ ✅       │
-//  │ Leaderboard      │ currentStreak    │ ✅         │ ✅       │
-//  ├─────────────────┼──────────────────┼────────────┼──────────┤
-//  │ FriendRequest    │ recordName       │ ✅         │          │
-//  │ FriendRequest    │ fromUserID       │ ✅         │          │
-//  │ FriendRequest    │ toUserID         │ ✅         │          │
-//  │ FriendRequest    │ status           │ ✅         │          │
-//  ├─────────────────┼──────────────────┼────────────┼──────────┤
-//  │ FriendRelation   │ recordName       │ ✅         │          │
-//  │ FriendRelation   │ userID           │ ✅         │          │
-//  │ FriendRelation   │ friendID         │ ✅         │          │
-//  │ FriendRelation   │ friendDisplayName│ ✅         │          │
-//  ├─────────────────┼──────────────────┼────────────┼──────────┤
-//  │ PlayerRegistry   │ recordName       │ ✅         │          │
-//  └─────────────────┴──────────────────┴────────────┴──────────┘
+//  ┌─────────────────────────┬──────────────────┬────────────┬──────────┐
+//  │ Record Type              │ Field            │ Queryable  │ Sortable │
+//  ├─────────────────────────┼──────────────────┼────────────┼──────────┤
+//  │ Leaderboard              │ recordName       │ ✅         │          │
+//  │ Leaderboard              │ userID           │ ✅         │          │
+//  │ Leaderboard              │ displayName      │ ✅         │          │
+//  │ Leaderboard              │ animalsHatched   │ ✅         │ ✅       │
+//  │ Leaderboard              │ totalStudyTime   │ ✅         │ ✅       │
+//  │ Leaderboard              │ totalCoins       │ ✅         │ ✅       │
+//  │ Leaderboard              │ currentStreak    │ ✅         │ ✅       │
+//  ├─────────────────────────┼──────────────────┼────────────┼──────────┤
+//  │ FriendRequest            │ recordName       │ ✅         │          │
+//  │ FriendRequest            │ fromUserID       │ ✅         │          │
+//  │ FriendRequest            │ toUserID         │ ✅         │          │
+//  │ FriendRequest            │ status           │ ✅         │          │
+//  ├─────────────────────────┼──────────────────┼────────────┼──────────┤
+//  │ FriendRelation           │ recordName       │ ✅         │          │
+//  │ FriendRelation           │ userID           │ ✅         │          │
+//  │ FriendRelation           │ friendID         │ ✅         │          │
+//  │ FriendRelation           │ friendDisplayName│ ✅         │          │
+//  ├─────────────────────────┼──────────────────┼────────────┼──────────┤
+//  │ PlayerRegistry           │ recordName       │ ✅         │          │
+//  ├─────────────────────────┼──────────────────┼────────────┼──────────┤
+//  │ EggCrackNotification     │ recordName       │ ✅         │          │
+//  │ EggCrackNotification     │ targetUserID     │ ✅         │          │
+//  │ EggCrackNotification     │ crackerUserID    │ ✅         │          │
+//  │ EggCrackNotification     │ timestamp        │ ✅         │ ✅       │
+//  └─────────────────────────┴──────────────────┴────────────┴──────────┘
 //
 //  After adding indexes, call cleanupSeedRecords() or delete them in Dashboard.
 //
@@ -44,6 +49,7 @@ enum CloudKitSchemaSeeder {
     private static let seedFriendReqID    = CKRecord.ID(recordName: "__seed_friendrequest")
     private static let seedFriendRelID    = CKRecord.ID(recordName: "__seed_friendrelation")
     private static let seedRegistryID     = CKRecord.ID(recordName: "__seed_registry")
+    private static let seedCrackNotifID   = CKRecord.ID(recordName: "__seed_cracknotification")
 
     /// Call this ONCE from a button or app launch.
     /// Creates dummy records that define every field CloudKit needs to see.
@@ -80,10 +86,18 @@ enum CloudKitSchemaSeeder {
         let reg = CKRecord(recordType: "PlayerRegistry", recordID: seedRegistryID)
         reg["playerIDs"] = ["__seed"] as CKRecordValue
 
+        // --- EggCrackNotification ---
+        let crack = CKRecord(recordType: "EggCrackNotification", recordID: seedCrackNotifID)
+        crack["crackerUserID"]       = "__seed_a" as CKRecordValue
+        crack["crackerDisplayName"]  = "Seed A" as CKRecordValue
+        crack["targetUserID"]        = "__seed_b" as CKRecordValue
+        crack["eggType"]             = "FarmEgg" as CKRecordValue
+        crack["timestamp"]           = Date() as CKRecordValue
+
         // Save all at once
         do {
             let result = try await db.modifyRecords(
-                saving: [lb, fr, rel, reg],
+                saving: [lb, fr, rel, reg, crack],
                 deleting: [],
                 savePolicy: .allKeys
             )
@@ -97,7 +111,7 @@ enum CloudKitSchemaSeeder {
     /// Delete seed records after indexes are configured.
     static func cleanupSeedRecords() async {
         let db = CKContainer(identifier: containerID).publicCloudDatabase
-        let ids = [seedLeaderboardID, seedFriendReqID, seedFriendRelID, seedRegistryID]
+        let ids = [seedLeaderboardID, seedFriendReqID, seedFriendRelID, seedRegistryID, seedCrackNotifID]
 
         do {
             let result = try await db.modifyRecords(saving: [], deleting: ids)

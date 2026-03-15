@@ -69,13 +69,17 @@ struct DisplayNamePromptView: View {
                         .cornerRadius(14)
                         .padding(.horizontal, 40)
                         .onChange(of: name) { _, newValue in
-                            // Cap at 20 characters
-                            if newValue.count > 20 {
-                                name = String(newValue.prefix(20))
+                            // Replace spaces with underscores and cap at 20 characters
+                            var sanitized = newValue.replacingOccurrences(of: " ", with: "_")
+                            if sanitized.count > 20 {
+                                sanitized = String(sanitized.prefix(20))
+                            }
+                            if sanitized != newValue {
+                                name = sanitized
                             }
                         }
                     
-                    Text("\(trimmedName.count)/20 characters")
+                    Text("\(trimmedName.count)/20 characters  •  No spaces allowed")
                         .font(.caption)
                         .foregroundColor(isValid ? .white.opacity(0.5) : .orange)
                 }

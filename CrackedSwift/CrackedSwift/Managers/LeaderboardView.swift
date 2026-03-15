@@ -229,6 +229,8 @@ struct LeaderboardRow: View {
     let category: LeaderboardCategory
     let isMe: Bool
     
+    @State private var showingProfile = false
+    
     private var rankDisplay: String {
         switch rank {
         case 1: return "🥇"
@@ -286,6 +288,13 @@ struct LeaderboardRow: View {
             RoundedRectangle(cornerRadius: 12)
                 .stroke(isMe ? Color.yellow.opacity(0.3) : Color.clear, lineWidth: 1)
         )
+        .contentShape(Rectangle())
+        .onTapGesture {
+            if !isMe { showingProfile = true }
+        }
+        .sheet(isPresented: $showingProfile) {
+            PlayerProfileView(entry: entry)
+        }
     }
 }
 

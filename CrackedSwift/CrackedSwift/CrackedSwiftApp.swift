@@ -6,9 +6,52 @@
 //
 
 import SwiftUI
+import CloudKit
+import UserNotifications
+
+// MARK: - AppDelegate (APNs + CloudKit Push)
+
+class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
+    
+    func application(_ application: UIApplication,
+                     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        UNUserNotificationCenter.current().delegate = self
+        return true
+    }
+    
+    func application(_ application: UIApplication,
+                     didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        let token = deviceToken.map { String(format: "%02.2hhx", $0) }.joined()
+        print("🔔 APNs token registered: \(token.prefix(12))…")
+    }
+    
+    func application(_ application: UIApplication,
+                     didFailToRegisterForRemoteNotificationsWithError error: Error) {
+        print("🔔 APNs registration failed: \(error.localizedDescription)")
+    }
+    
+    // Handle silent/background CloudKit push
+    func application(_ application: UIApplication,
+                     didReceiveRemoteNotification userInfo: [AnyHashable: Any],
+                     fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
+        Task { @MainActor in
+            await CrackNotificationManager.shared.handleRemoteNotification(userInfo: userInfo)
+            completionHandler(.newData)
+        }
+    }
+    
+    // Show notification even when app is in foreground
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                willPresent notification: UNNotification,
+                                withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        completionHandler([.banner, .sound])
+    }
+}
 
 @main
 struct CrackedSwiftApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    
     // Initialize managers early
     @StateObject private var gameData = GameDataManager.shared
     @StateObject private var authManager = AuthManager.shared
@@ -25,6 +68,12 @@ struct CrackedSwiftApp: App {
                     
                     // One-time cleanup of schema seed records — remove after one run
                     await CloudKitSchemaSeeder.cleanupSeedRecords()
+                    
+                    // Set up crack notifications (subscription + permissions)
+                    await CrackNotificationManager.shared.setup()
+                    
+                    // Clean up old crack notification records
+                    await CrackNotificationManager.shared.cleanupOldNotifications()
                 }
         }
     }

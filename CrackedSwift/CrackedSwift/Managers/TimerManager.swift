@@ -314,6 +314,11 @@ class TimerManager: ObservableObject {
         if let eggTitle = activeEggTitle {
             let grave = animalManager.createGrave(for: eggTitle)
             onEggCracked?(grave)
+            
+            // Notify friends about the cracked egg
+            Task {
+                await CrackNotificationManager.shared.notifyFriendsOfCrack(eggType: eggTitle)
+            }
         }
         
         stopTimer()
@@ -780,6 +785,11 @@ class TimerManager: ObservableObject {
             // Crack the egg - create a grave
             let grave = animalManager.createGrave(for: eggTitle)
             onEggCracked?(grave)
+            
+            // Notify friends about the cracked egg
+            Task {
+                await CrackNotificationManager.shared.notifyFriendsOfCrack(eggType: eggTitle)
+            }
         }
         
         // Clear state

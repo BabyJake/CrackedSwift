@@ -109,7 +109,7 @@ class AuthManager: ObservableObject {
             if let fullName = credential.fullName {
                 let components = [fullName.givenName, fullName.familyName].compactMap { $0 }
                 if !components.isEmpty {
-                    displayName = components.joined(separator: " ")
+                    displayName = AuthManager.sanitizeUsername(components.joined(separator: "_"))
                 }
             }
             
@@ -152,13 +152,21 @@ class AuthManager: ObservableObject {
         }
     }
     
+    // MARK: - Username Sanitization
+    
+    /// Replaces spaces with underscores and trims whitespace.
+    static func sanitizeUsername(_ name: String) -> String {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.replacingOccurrences(of: " ", with: "_")
+    }
+    
     // MARK: - Profile Updates
     
     /// Sets the display name. Can only be called once (on the post-sign-in prompt).
     func updateDisplayName(_ name: String) {
         guard var profile = userProfile else { return }
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        profile.displayName = trimmed.isEmpty ? nil : trimmed
+        let sanitized = AuthManager.sanitizeUsername(name)
+        profile.displayName = sanitized.isEmpty ? nil : sanitized
         self.userProfile = profile
         saveProfile(profile)
     }
@@ -205,9 +213,16 @@ class AuthManager: ObservableObject {
     
     private func loadProfile() {
         guard let data = userDefaults.data(forKey: profileKey),
-              let profile = try? JSONDecoder().decode(UserProfile.self, from: data) else {
+              var profile = try? JSONDecoder().decode(UserProfile.self, from: data) else {
             isSignedIn = false
             return
+        }
+        
+        // Migrate existing usernames: replace spaces with underscores
+        if let name = profile.displayName, name.contains(" ") {
+            profile.displayName = AuthManager.sanitizeUsername(name)
+            saveProfile(profile)
+            print("[Auth] Migrated username: spaces → underscores")
         }
         
         // Only mark as signed in if we also have the Keychain credential
