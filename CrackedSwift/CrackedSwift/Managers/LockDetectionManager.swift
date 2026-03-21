@@ -2,72 +2,63 @@
 //  LockDetectionManager.swift
 //  CrackedSwift
 //
-//  Flora-style screen lock detection using the "com.apple.springboard.lockcomplete"
-//  Darwin notification. When the device locks, isScreenLocked becomes true.
+//  Screen lock detection using public UIKit notifications.
+//  When the device locks, isScreenLocked becomes true.
 //  TimerManager reads this flag to distinguish "phone sleep" from "intentional leave."
 //
-
-import Foundation
-
-// The notify_* C API lives in <notify.h>. On iOS the module isn't named
-// "Darwin.notify" — we pull it in with a bridging typealias-free approach:
-// declare the three symbols we need directly from libSystem.
+//  Uses UIApplication.protectedDataWillBecomeUnavailableNotification (fires on device lock)
+//  and UIApplication.protectedDataDidBecomeAvailableNotification (fires on unlock).
+//  These are fully public APIs — no private SpringBoard notifications needed.
 //
-// notify_register_dispatch, notify_cancel, NOTIFY_STATUS_OK
-private let NOTIFY_STATUS_OK: UInt32 = 0
 
-@_silgen_name("notify_register_dispatch")
-private func _notify_register_dispatch(
-    _ name: UnsafePointer<CChar>,
-    _ out_token: UnsafeMutablePointer<Int32>,
-    _ queue: DispatchQueue,
-    _ handler: @escaping @convention(block) (Int32) -> Void
-) -> UInt32
-
-@_silgen_name("notify_cancel")
-private func _notify_cancel(_ token: Int32) -> UInt32
+import UIKit
 
 @MainActor
-class LockDetectionManager {
+final class LockDetectionManager {
     static let shared = LockDetectionManager()
 
-    /// `true` after the device-lock Darwin notification fires.
+    /// `true` after the device-lock notification fires.
     /// Reset by the foreground handler after each background→foreground cycle.
     private(set) var isScreenLocked: Bool = false
 
-    private var notifyToken: Int32 = 0
-    private var isRegistered: Bool = false
-
     private init() {
-        registerForLockNotification()
+        registerForLockNotifications()
     }
 
-    // MARK: - Darwin Notification
+    // MARK: - Public API Lock Detection
 
-    private func registerForLockNotification() {
-        guard !isRegistered else { return }
+    private func registerForLockNotifications() {
+        // protectedDataWillBecomeUnavailable fires when the device locks
+        // (passcode-protected devices — which is nearly all real devices).
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleProtectedDataUnavailable),
+            name: UIApplication.protectedDataWillBecomeUnavailableNotification,
+            object: nil
+        )
 
-        // notify_register_dispatch is a public C API (Darwin / libSystem).
-        // "com.apple.springboard.lockcomplete" fires whenever the device locks
-        // (side-button press or auto-lock timeout).
-        let status = _notify_register_dispatch(
-            "com.apple.springboard.lockcomplete",
-            &notifyToken,
-            DispatchQueue.main
-        ) { (token: Int32) in
-            // The C callback runs on DispatchQueue.main; hop to MainActor for isolation.
-            Task { @MainActor in
-                LockDetectionManager.shared.isScreenLocked = true
-                print("[CrackedSwift] 🔒 Darwin: Screen lock detected (lockcomplete)")
-            }
-        }
+        // protectedDataDidBecomeAvailable fires when the device unlocks.
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleProtectedDataAvailable),
+            name: UIApplication.protectedDataDidBecomeAvailableNotification,
+            object: nil
+        )
 
-        isRegistered = (status == NOTIFY_STATUS_OK)
-        if isRegistered {
-            print("[CrackedSwift] ✅ Registered for com.apple.springboard.lockcomplete")
-        } else {
-            print("[CrackedSwift] ❌ Failed to register for lock notification (status \(status))")
-        }
+        print("[CrackedSwift] ✅ Registered for protectedData lock/unlock notifications (public API)")
+    }
+
+    // MARK: - Notification Handlers
+
+    @objc private func handleProtectedDataUnavailable() {
+        isScreenLocked = true
+        print("[CrackedSwift] 🔒 Screen lock detected (protectedData unavailable)")
+    }
+
+    @objc private func handleProtectedDataAvailable() {
+        // Note: we don't reset isScreenLocked here — TimerManager reads + resets it
+        // explicitly via resetLockState() in handleAppForegrounded().
+        print("[CrackedSwift] 🔓 Screen unlock detected (protectedData available)")
     }
 
     // MARK: - State Management
@@ -76,11 +67,5 @@ class LockDetectionManager {
     /// background→foreground cycle starts clean.
     func resetLockState() {
         isScreenLocked = false
-    }
-
-    deinit {
-        if isRegistered {
-            _ = _notify_cancel(notifyToken)
-        }
     }
 }

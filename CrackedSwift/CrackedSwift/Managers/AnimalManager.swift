@@ -8,7 +8,7 @@
 import Foundation
 
 @MainActor
-class AnimalManager: ObservableObject {
+final class AnimalManager: ObservableObject {
     static let shared = AnimalManager()
     
     private let dataManager = GameDataManager.shared

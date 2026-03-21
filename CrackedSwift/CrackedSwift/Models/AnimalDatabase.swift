@@ -140,7 +140,7 @@ struct AnimalDatabase {
         "Sheep": AnimalData(
             name: "Sheep",
             imageName: "Uncommon_Sheep",
-            rarity: .common,
+            rarity: .uncommon,
             description: "A fluffy farm sheep"
         ),
         
@@ -172,13 +172,13 @@ struct AnimalDatabase {
         "Goat": AnimalData(
             name: "Goat",
             imageName: "Uncommon_Goat",
-            rarity: .rare,
+            rarity: .uncommon,
             description: "An uncommon farm goat"
         ),
         "Pig": AnimalData(
             name: "Pig",
             imageName: "Uncommon_Pig",
-            rarity: .rare,
+            rarity: .uncommon,
             description: "An uncommon farm pig"
         ),
         "BorderCollie": AnimalData(
@@ -338,19 +338,19 @@ struct AnimalDatabase {
         "ArticLemming": AnimalData(
             name: "ArticLemming",
             imageName: "Uncommon_ArticLemming",
-            rarity: .rare,
+            rarity: .uncommon,
             description: "An uncommon arctic lemming"
         ),
         "DallSheep": AnimalData(
             name: "DallSheep",
             imageName: "Uncommon_DallSheep",
-            rarity: .rare,
+            rarity: .uncommon,
             description: "An uncommon dall sheep"
         ),
         "ArcticPenguin": AnimalData(
             name: "ArcticPenguin",
             imageName: "Uncommon_Penguin",
-            rarity: .rare,
+            rarity: .uncommon,
             description: "An uncommon arctic penguin"
         ),
         "Ermine": AnimalData(

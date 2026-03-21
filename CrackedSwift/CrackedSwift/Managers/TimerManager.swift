@@ -364,9 +364,9 @@ class TimerManager: ObservableObject {
                     isTimerRunning = false
                     
                     // LockDetectionManager is a singleton that registers on init;
-                    // no extra setup needed. The Darwin flag from before termination
+                    // no extra setup needed. The lock flag from before termination
                     // is lost, but handleAppForegrounded() will still run and check
-                    // the live Darwin flag (covers the lock-then-relaunch case).
+                    // the live protectedData flag (covers the lock-then-relaunch case).
                     // #region agent log
                     logDebug("TimerManager.swift:329", "Timer restored with time remaining", ["timeRemaining": timeRemaining])
                     // #endregion
@@ -551,7 +551,7 @@ class TimerManager: ObservableObject {
             self?.endBackgroundTask()
         }
         
-        // After 0.2 s, read the Darwin lock flag set by LockDetectionManager.
+        // After 0.2 s, read the lock flag set by LockDetectionManager.
         // If the device locked (side button / auto-lock) the flag is already true.
         // If the user just swiped home, the flag is still false → app switch.
         let workItem = DispatchWorkItem { [weak self] in
@@ -580,7 +580,7 @@ class TimerManager: ObservableObject {
         let appState = UIApplication.shared.applicationState
         guard appState == .active else { return }
         
-        // ── Read & reset the Darwin lock flag BEFORE any early returns ──
+        // ── Read & reset the lock flag BEFORE any early returns ──
         // This must happen first so the flag is consumed exactly once per cycle.
         let wasLockedDuringBackground = LockDetectionManager.shared.isScreenLocked
         LockDetectionManager.shared.resetLockState()
