@@ -10,13 +10,20 @@ import SwiftUI
 struct CircularSlider: View {
     @Binding var selectedMinutes: Int
     @Binding var isTimerRunning: Bool
+    @Binding var isDragging: Bool
     
     // Timer progress tracking
     var timeRemaining: TimeInterval = 0
     var initialDuration: TimeInterval = 0
     
-    // Current egg image name
+    // Current egg image name — nil or "none" means no egg selected
     var currentEggImageName: String = "FarmEgg"
+    
+    /// Whether the user has an egg selected (not EmptyEgg placeholder)
+    var hasEggSelected: Bool = true
+    
+    /// Called when the user taps the egg/empty-egg in the nest
+    var onEggTap: (() -> Void)? = nil
     
     // Time options: 5–120 minutes in 5-minute steps
     let minMinutes: Int = 5
@@ -24,8 +31,9 @@ struct CircularSlider: View {
     let stepMinutes: Int = 5
     
     @State private var angle: Double = 0
-    @State private var isDragging: Bool = false
     @State private var showEgg: Bool = false
+    @State private var shakeOffset: CGFloat = 0
+    @State private var isShaking: Bool = false
     
     private let strokeWidth: CGFloat = 8
     private var circleSize: CGFloat = 200
@@ -34,12 +42,15 @@ struct CircularSlider: View {
         return (circleSize / 2) - (strokeWidth / 2)
     }
     
-    init(selectedMinutes: Binding<Int>, isTimerRunning: Binding<Bool>, timeRemaining: TimeInterval = 0, initialDuration: TimeInterval = 0, currentEggImageName: String = "FarmEgg") {
+    init(selectedMinutes: Binding<Int>, isTimerRunning: Binding<Bool>, isDragging: Binding<Bool> = .constant(false), timeRemaining: TimeInterval = 0, initialDuration: TimeInterval = 0, currentEggImageName: String = "FarmEgg", hasEggSelected: Bool = true, onEggTap: (() -> Void)? = nil) {
         self._selectedMinutes = selectedMinutes
         self._isTimerRunning = isTimerRunning
+        self._isDragging = isDragging
         self.timeRemaining = timeRemaining
         self.initialDuration = initialDuration
         self.currentEggImageName = currentEggImageName
+        self.hasEggSelected = hasEggSelected
+        self.onEggTap = onEggTap
     }
     
     var body: some View {
@@ -102,36 +113,57 @@ struct CircularSlider: View {
             .offset(y: 35) // Move nest down
             .transition(.opacity)
             
-            // Egg image that appears when timer starts (in front of nest, smaller to fit inside)
-            if showEgg {
-                Group {
-                    if currentEggImageName == "Piggybank" {
-                        // Special handling for piggybank - use asset
-                        if UIImage(named: "PiggyBank") != nil {
-                            Image("PiggyBank")
+            // Egg image — always visible in the nest
+            // Shows EmptyEgg (tappable) when no egg selected, or the selected egg
+            Group {
+                if !hasEggSelected {
+                    // Empty egg with plus — tap to select
+                    Button(action: { onEggTap?() }) {
+                        if UIImage(named: "EmptyEgg") != nil {
+                            Image("EmptyEgg")
                                 .resizable()
                                 .scaledToFit()
                                 .frame(width: 80, height: 80)
                         } else {
-                            Image(systemName: "oval.fill")
+                            Image(systemName: "plus.circle.dashed")
                                 .font(.system(size: 60))
-                                .foregroundColor(.white.opacity(0.8))
+                                .foregroundColor(.white.opacity(0.6))
                         }
-                    } else if UIImage(named: currentEggImageName) != nil {
-                        Image(currentEggImageName)
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 80, height: 80)
-                    } else {
-                        // Fallback egg image
-                        Image(systemName: "oval.fill")
-                            .font(.system(size: 60))
-                            .foregroundColor(.white.opacity(0.8))
                     }
+                    .buttonStyle(.plain)
+                } else {
+                    // Selected egg — tappable to change, with shake on timer start
+                    Button(action: { if !isTimerRunning { onEggTap?() } }) {
+                        Group {
+                            if currentEggImageName == "Piggybank" {
+                                if UIImage(named: "PiggyBank") != nil {
+                                    Image("PiggyBank")
+                                        .resizable()
+                                        .scaledToFit()
+                                        .frame(width: 80, height: 80)
+                                } else {
+                                    Image(systemName: "oval.fill")
+                                        .font(.system(size: 60))
+                                        .foregroundColor(.white.opacity(0.8))
+                                }
+                            } else if UIImage(named: currentEggImageName) != nil {
+                                Image(currentEggImageName)
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: 80, height: 80)
+                            } else {
+                                Image(systemName: "oval.fill")
+                                    .font(.system(size: 60))
+                                    .foregroundColor(.white.opacity(0.8))
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .offset(x: shakeOffset)
                 }
-                .offset(y: -5) // Slight upward offset to center in nest
-                .transition(.scale.combined(with: .opacity))
             }
+            .offset(y: -5) // Slight upward offset to center in nest
+            .transition(.scale.combined(with: .opacity))
         }
         .frame(width: 280, height: 280)
         .onAppear {
@@ -143,8 +175,9 @@ struct CircularSlider: View {
             }
         }
         .onChange(of: isTimerRunning) { oldValue, newValue in
-            withAnimation(.spring(response: 0.5, dampingFraction: 0.6)) {
-                showEgg = newValue
+            if newValue && !oldValue {
+                // Timer just started — shake the egg
+                triggerShake()
             }
         }
     }
@@ -242,6 +275,30 @@ struct CircularSlider: View {
         let rounded = ((selectedMinutes + stepMinutes / 2) / stepMinutes) * stepMinutes
         selectedMinutes = max(minMinutes, min(maxMinutes, rounded))
         updateAngleFromMinutes()
+    }
+    
+    // MARK: - Shake Animation
+    
+    /// Triggers a short shake animation on the egg when the timer starts.
+    private func triggerShake() {
+        isShaking = true
+        let shakeSequence: [(CGFloat, Double)] = [
+            (6, 0.06), (-6, 0.06), (5, 0.05), (-5, 0.05),
+            (3, 0.05), (-3, 0.05), (1.5, 0.04), (-1.5, 0.04), (0, 0.04)
+        ]
+        var delay: Double = 0
+        for (offset, duration) in shakeSequence {
+            delay += duration
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                withAnimation(.easeInOut(duration: duration)) {
+                    shakeOffset = offset
+                }
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay + 0.05) {
+            shakeOffset = 0
+            isShaking = false
+        }
     }
 }
 

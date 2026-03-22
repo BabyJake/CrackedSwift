@@ -41,8 +41,8 @@ struct SanctuaryView: View {
                 VStack(spacing: 0) {
                     // Animal count header
                     HStack {
-                        let animalCount = visibleInstances.filter { !$0.isGrave }.count
-                        let graveCount = visibleInstances.filter { $0.isGrave }.count
+                        let animalCount = visibleInstances.filter { !$0.isShell }.count
+                        let shellCount = visibleInstances.filter { $0.isShell }.count
                         
                         HStack(spacing: 6) {
                             Image(systemName: "leaf.fill")
@@ -53,14 +53,14 @@ struct SanctuaryView: View {
                                 .foregroundColor(.white.opacity(0.7))
                         }
                         
-                        if graveCount > 0 {
+                        if shellCount > 0 {
                             Text("\u{00B7}")
                                 .foregroundColor(.white.opacity(0.3))
                             HStack(spacing: 4) {
                                 Image(systemName: "xmark.circle")
                                     .font(.system(size: 10))
                                     .foregroundColor(.white.opacity(0.4))
-                                Text("\(graveCount)")
+                                Text("\(shellCount)")
                                     .font(.system(size: 13, weight: .medium, design: .rounded))
                                     .foregroundColor(.white.opacity(0.5))
                             }
@@ -185,7 +185,10 @@ struct SanctuaryView: View {
                 .sheet(isPresented: $showingStatistics) {
                     StatisticsView()
                 }
-                .sheet(item: $showingAnimalDetail) { instance in
+                .sheet(item: $showingAnimalDetail, onDismiss: {
+                    // Refresh grid after detail sheet closes (shell may have been removed)
+                    updateVisibleInstances(skipReposition: false)
+                }) { instance in
                     AnimalDetailSheet(instance: instance)
                 }
                 .onAppear {
@@ -243,7 +246,7 @@ struct SanctuaryView: View {
     
     private func processPendingItems() {
         gameData.processPendingAnimal()
-        gameData.processUnlockedGraves()
+        gameData.processUnlockedShells()
     }
     
     private func updateVisibleInstances(skipReposition: Bool = false) {
@@ -359,7 +362,7 @@ struct GridView: View {
                 .zIndex(zIndex)
             }
             
-            // 2. Draw Animals/Graves
+            // 2. Draw Animals/Shells
             ForEach(instances, id: \.id) { instance in
                 if !instance.id.isEmpty {
                     let isDragging = draggingInstanceId == instance.id
@@ -431,15 +434,15 @@ struct AnimalInstanceView: View {
         
         // Sprite sizes — keep within tile bounds to avoid overlap
         let spriteWidth: CGFloat = tileWidth * 0.55
-        let spriteHeight: CGFloat = instance.isGrave ? tileHeight * 1.0 : spriteWidth
+        let spriteHeight: CGFloat = instance.isShell ? tileHeight * 1.0 : spriteWidth
         
         let finalX = pos.x + CGFloat(animalOffset.x) + dragOffset.width
         let finalY = pos.y - (spriteHeight / 2) + CGFloat(animalOffset.y) + dragOffset.height
         let objectZIndex = isDragging ? 500.0 : Double(instance.gridPosition.x + instance.gridPosition.y) + 100.0
         
         Group {
-            if instance.isGrave {
-                GraveCard(instance: instance)
+            if instance.isShell {
+                ShellCard(instance: instance)
                     .frame(width: spriteWidth, height: spriteHeight)
             } else {
                 AnimalGridCard(instance: instance)
@@ -532,30 +535,30 @@ struct AnimalGridCard: View {
     }
 }
 
-struct GraveCard: View {
+struct ShellCard: View {
     let instance: GameData.AnimalInstance
     
     var body: some View {
         Group {
-            if UIImage(named: "grave") != nil {
-                Image("grave")
+            if UIImage(named: "shell") != nil {
+                Image("shell")
                     .resizable()
                     .scaledToFit()
-                    .colorMultiply(graveColor)
+                    .colorMultiply(shellColor)
             } else {
                 VStack(spacing: 0) {
-                    Image(systemName: "cross.fill")
+                    Image(systemName: "egg.fill")
                         .font(.system(size: 20))
                     RoundedRectangle(cornerRadius: 8)
                         .frame(height: 40)
                 }
-                .foregroundColor(graveColor)
+                .foregroundColor(shellColor)
             }
         }
         .shadow(radius: 2)
     }
     
-    private var graveColor: Color {
+    private var shellColor: Color {
         if instance.eggType == "JungleEgg" {
             return Color(red: 0.341, green: 0.818, blue: 1.0)
         }
@@ -586,7 +589,7 @@ struct StatisticsView: View {
                         HStack(spacing: 12) {
                             MiniStatBubble(icon: "leaf.fill", value: "\(totalAnimals)", label: "Animals", tint: Color(hex: "#A8E6C3"))
                             MiniStatBubble(icon: "circle.fill", value: "\(gameData.getTotalCoins())", label: "Coins", tint: AppColors.coinGold)
-                            MiniStatBubble(icon: "xmark.circle", value: "\(totalGraves)", label: "Graves", tint: Color.white.opacity(0.5))
+                            MiniStatBubble(icon: "xmark.circle", value: "\(totalShells)", label: "Shells", tint: Color.white.opacity(0.5))
                         }
                         .padding(.horizontal)
                         
@@ -674,16 +677,16 @@ struct StatisticsView: View {
     // Computed properties for statistics
     private var totalAnimals: Int {
         let instances = gameData.getAnimalInstances()
-        return instances.filter { !$0.isGrave }.count
+        return instances.filter { !$0.isShell }.count
     }
     
-    private var totalGraves: Int {
+    private var totalShells: Int {
         let instances = gameData.getAnimalInstances()
-        return instances.filter { $0.isGrave }.count
+        return instances.filter { $0.isShell }.count
     }
     
     private var rarityCounts: [AnimalRarity: Int] {
-        let instances = gameData.getAnimalInstances().filter { !$0.isGrave }
+        let instances = gameData.getAnimalInstances().filter { !$0.isShell }
         var counts: [AnimalRarity: Int] = [:]
         
         for instance in instances {
@@ -805,6 +808,10 @@ struct NatureRarityRow: View {
 struct AnimalDetailSheet: View {
     let instance: GameData.AnimalInstance
     @Environment(\.dismiss) private var dismiss
+    @StateObject private var storeManager = StoreManager.shared
+    @State private var showRemoveConfirmation = false
+    @State private var isRemoving = false
+    @State private var removalSuccess = false
     
     private var animalData: AnimalData? {
         AnimalDatabase.getAnimalData(for: instance.animalName)
@@ -831,89 +838,10 @@ struct AnimalDetailSheet: View {
                     VStack(spacing: 24) {
                         Spacer().frame(height: 8)
                         
-                        // Large animal image
-                        ZStack {
-                            // Organic ring
-                            Circle()
-                                .fill(
-                                    RadialGradient(
-                                        colors: [rarityColor.opacity(0.15), rarityColor.opacity(0.03)],
-                                        center: .center,
-                                        startRadius: 40,
-                                        endRadius: 110
-                                    )
-                                )
-                                .frame(width: 220, height: 220)
-                            
-                            Circle()
-                                .stroke(rarityColor.opacity(0.25), lineWidth: 1.5)
-                                .frame(width: 200, height: 200)
-                            
-                            let imageName = AnimalDatabase.getImageName(for: instance.animalName)
-                            if let config = AnimationFrameDetector.getAnimationConfig(for: instance.animalName) {
-                                AnimatedSpriteView(
-                                    baseName: instance.animalName,
-                                    animationName: config.animationName,
-                                    frameCount: config.frameCount,
-                                    frameDuration: config.frameDuration,
-                                    startFrame: config.startFrame,
-                                    frameFormat: config.frameFormat
-                                )
-                                .frame(width: 140, height: 140)
-                            } else if UIImage(named: imageName) != nil {
-                                Image(imageName)
-                                    .resizable()
-                                    .scaledToFit()
-                                    .frame(width: 140, height: 140)
-                            } else {
-                                Image(systemName: "pawprint.fill")
-                                    .font(.system(size: 60))
-                                    .foregroundColor(.white.opacity(0.3))
-                            }
-                        }
-                        
-                        // Animal name
-                        Text(instance.animalName)
-                            .font(.system(size: 28, weight: .bold, design: .rounded))
-                            .foregroundColor(.white)
-                        
-                        // Rarity badge
-                        if let data = animalData {
-                            Text(data.rarity.rawValue.capitalized)
-                                .font(.system(size: 13, weight: .semibold, design: .rounded))
-                                .foregroundColor(rarityColor)
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 5)
-                                .background(
-                                    Capsule()
-                                        .fill(rarityColor.opacity(0.15))
-                                )
-                                .overlay(
-                                    Capsule()
-                                        .stroke(rarityColor.opacity(0.3), lineWidth: 1)
-                                )
-                        }
-                        
-                        // Info card
-                        NatureCard {
-                            VStack(spacing: 12) {
-                                if let eggType = instance.eggType {
-                                    DetailInfoRow(icon: "oval.fill", label: "Egg", value: eggType.replacingOccurrences(of: "Egg", with: " Egg"))
-                                }
-                                
-                                DetailInfoRow(icon: "calendar", label: "Hatched", value: formattedDate)
-                                
-                                DetailInfoRow(icon: "mappin.circle.fill", label: "Position", value: "(\(instance.gridPosition.x), \(instance.gridPosition.y))")
-                            }
-                        }
-                        
-                        // Description
-                        if let data = animalData, let desc = data.description, !desc.isEmpty {
-                            Text(desc)
-                                .font(.system(size: 15, design: .rounded))
-                                .foregroundColor(.white.opacity(0.6))
-                                .multilineTextAlignment(.center)
-                                .padding(.horizontal, 32)
+                        if instance.isShell {
+                            shellDetailContent
+                        } else {
+                            animalDetailContent
                         }
                         
                         Spacer()
@@ -933,6 +861,252 @@ struct AnimalDetailSheet: View {
                     .foregroundColor(Color(hex: "#A8E6C3"))
                 }
             }
+            .alert("Remove Shell", isPresented: $showRemoveConfirmation) {
+                Button("Cancel", role: .cancel) { }
+                Button("Remove", role: .destructive) {
+                    Task {
+                        isRemoving = true
+                        let success = await storeManager.purchaseShellRemoval(shellInstanceId: instance.id)
+                        isRemoving = false
+                        if success {
+                            removalSuccess = true
+                            // Auto-dismiss after a brief moment
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                                dismiss()
+                            }
+                        }
+                    }
+                }
+            } message: {
+                if let product = storeManager.removeShellProduct {
+                    Text("Remove this shell from your sanctuary for \(product.displayPrice)?")
+                } else {
+                    Text("Remove this shell from your sanctuary for £0.99?")
+                }
+            }
+        }
+    }
+    
+    // MARK: - Shell Detail Content
+    
+    @ViewBuilder
+    private var shellDetailContent: some View {
+        // Shell image
+        ZStack {
+            Circle()
+                .fill(
+                    RadialGradient(
+                        colors: [Color.gray.opacity(0.15), Color.gray.opacity(0.03)],
+                        center: .center,
+                        startRadius: 40,
+                        endRadius: 110
+                    )
+                )
+                .frame(width: 220, height: 220)
+            
+            Circle()
+                .stroke(Color.gray.opacity(0.25), lineWidth: 1.5)
+                .frame(width: 200, height: 200)
+            
+            if UIImage(named: "shell") != nil {
+                Image("shell")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 100, height: 100)
+                    .colorMultiply(shellColor)
+            } else {
+                Image(systemName: "egg.fill")
+                    .font(.system(size: 60))
+                    .foregroundColor(.gray.opacity(0.6))
+            }
+        }
+        
+        // Shell title
+        Text("Cracked Shell")
+            .font(.system(size: 28, weight: .bold, design: .rounded))
+            .foregroundColor(.white)
+        
+        Text("This egg didn't make it")
+            .font(.system(size: 15, design: .rounded))
+            .foregroundColor(.white.opacity(0.5))
+        
+        // Info card
+        NatureCard {
+            VStack(spacing: 12) {
+                if let eggType = instance.eggType {
+                    DetailInfoRow(icon: "oval.fill", label: "Egg Type", value: eggType.replacingOccurrences(of: "Egg", with: " Egg"))
+                }
+                
+                DetailInfoRow(icon: "calendar", label: "Date", value: formattedDate)
+                
+                DetailInfoRow(icon: "mappin.circle.fill", label: "Position", value: "(\(instance.gridPosition.x), \(instance.gridPosition.y))")
+            }
+        }
+        
+        // Remove Shell button
+        if removalSuccess {
+            HStack(spacing: 8) {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 18))
+                Text("Shell Removed!")
+                    .font(.system(size: 17, weight: .semibold, design: .rounded))
+            }
+            .foregroundColor(Color(hex: "#A8E6C3"))
+            .padding(.vertical, 14)
+            .padding(.horizontal, 32)
+            .background(
+                Capsule()
+                    .fill(Color(hex: "#A8E6C3").opacity(0.15))
+            )
+            .transition(.scale.combined(with: .opacity))
+        } else {
+            Button {
+                showRemoveConfirmation = true
+            } label: {
+                HStack(spacing: 10) {
+                    if isRemoving {
+                        ProgressView()
+                            .tint(.white)
+                    } else {
+                        Image(systemName: "trash.fill")
+                            .font(.system(size: 15))
+                    }
+                    
+                    Text(removeButtonLabel)
+                        .font(.system(size: 17, weight: .semibold, design: .rounded))
+                }
+                .foregroundColor(.white)
+                .padding(.vertical, 14)
+                .padding(.horizontal, 32)
+                .background(
+                    Capsule()
+                        .fill(
+                            LinearGradient(
+                                colors: [Color(hex: "#C0392B"), Color(hex: "#E74C3C")],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                )
+                .shadow(color: Color(hex: "#C0392B").opacity(0.4), radius: 8, x: 0, y: 4)
+            }
+            .disabled(isRemoving)
+            .opacity(isRemoving ? 0.7 : 1.0)
+        }
+        
+        if let error = storeManager.purchaseError {
+            Text(error)
+                .font(.system(size: 13, design: .rounded))
+                .foregroundColor(.red.opacity(0.8))
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
+        }
+    }
+    
+    private var removeButtonLabel: String {
+        if isRemoving {
+            return "Purchasing..."
+        }
+        if let product = storeManager.removeShellProduct {
+            return "Remove Shell — \(product.displayPrice)"
+        }
+        return "Remove Shell — £0.99"
+    }
+    
+    private var shellColor: Color {
+        if instance.eggType == "JungleEgg" {
+            return Color(red: 0.341, green: 0.818, blue: 1.0)
+        }
+        return Color.gray
+    }
+    
+    // MARK: - Animal Detail Content
+    
+    @ViewBuilder
+    private var animalDetailContent: some View {
+        // Large animal image
+        ZStack {
+            // Organic ring
+            Circle()
+                .fill(
+                    RadialGradient(
+                        colors: [rarityColor.opacity(0.15), rarityColor.opacity(0.03)],
+                        center: .center,
+                        startRadius: 40,
+                        endRadius: 110
+                    )
+                )
+                .frame(width: 220, height: 220)
+            
+            Circle()
+                .stroke(rarityColor.opacity(0.25), lineWidth: 1.5)
+                .frame(width: 200, height: 200)
+            
+            let imageName = AnimalDatabase.getImageName(for: instance.animalName)
+            if let config = AnimationFrameDetector.getAnimationConfig(for: instance.animalName) {
+                AnimatedSpriteView(
+                    baseName: instance.animalName,
+                    animationName: config.animationName,
+                    frameCount: config.frameCount,
+                    frameDuration: config.frameDuration,
+                    startFrame: config.startFrame,
+                    frameFormat: config.frameFormat
+                )
+                .frame(width: 140, height: 140)
+            } else if UIImage(named: imageName) != nil {
+                Image(imageName)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 140, height: 140)
+            } else {
+                Image(systemName: "pawprint.fill")
+                    .font(.system(size: 60))
+                    .foregroundColor(.white.opacity(0.3))
+            }
+        }
+        
+        // Animal name
+        Text(instance.animalName)
+            .font(.system(size: 28, weight: .bold, design: .rounded))
+            .foregroundColor(.white)
+        
+        // Rarity badge
+        if let data = animalData {
+            Text(data.rarity.rawValue.capitalized)
+                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .foregroundColor(rarityColor)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 5)
+                .background(
+                    Capsule()
+                        .fill(rarityColor.opacity(0.15))
+                )
+                .overlay(
+                    Capsule()
+                        .stroke(rarityColor.opacity(0.3), lineWidth: 1)
+                )
+        }
+        
+        // Info card
+        NatureCard {
+            VStack(spacing: 12) {
+                if let eggType = instance.eggType {
+                    DetailInfoRow(icon: "oval.fill", label: "Egg", value: eggType.replacingOccurrences(of: "Egg", with: " Egg"))
+                }
+                
+                DetailInfoRow(icon: "calendar", label: "Hatched", value: formattedDate)
+                
+                DetailInfoRow(icon: "mappin.circle.fill", label: "Position", value: "(\(instance.gridPosition.x), \(instance.gridPosition.y))")
+            }
+        }
+        
+        // Description
+        if let data = animalData, let desc = data.description, !desc.isEmpty {
+            Text(desc)
+                .font(.system(size: 15, design: .rounded))
+                .foregroundColor(.white.opacity(0.6))
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
         }
     }
     

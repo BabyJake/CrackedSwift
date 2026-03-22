@@ -121,7 +121,7 @@ class LeaderboardManager: ObservableObject {
         let profile = AuthManager.shared.userProfile
         let displayName = profile?.displayName ?? "Player"
         
-        let placedCount = gameData.getAnimalInstances().filter { !$0.isGrave }.count
+        let placedCount = gameData.getAnimalInstances().filter { !$0.isShell }.count
         let pendingCount = gameData.getPendingAnimals().count
         
         return LeaderboardEntry(
@@ -171,7 +171,7 @@ class LeaderboardManager: ObservableObject {
         let profile = AuthManager.shared.userProfile
         let displayName = profile?.displayName ?? "Player"
         
-        let placedCount = gameData.getAnimalInstances().filter { !$0.isGrave }.count
+        let placedCount = gameData.getAnimalInstances().filter { !$0.isShell }.count
         let pendingCount = gameData.getPendingAnimals().count
         let animalCount = placedCount + pendingCount
         

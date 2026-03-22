@@ -65,6 +65,9 @@ struct CrackedSwiftApp: App {
                 .task {
                     authManager.checkCredentialState()
                     await CloudKitManager.shared.syncOnLaunch()
+
+                    // Always reset selected egg on app open so EmptyEgg placeholder is shown.
+                    gameData.clearCurrentEgg()
                     
                     // One-time cleanup of schema seed records — remove after one run
                     await CloudKitSchemaSeeder.cleanupSeedRecords()

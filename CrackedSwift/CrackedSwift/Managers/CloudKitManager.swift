@@ -412,7 +412,7 @@ class CloudKitManager: ObservableObject {
         score += min(data.totalCoins, 10000)         // Cap so coins don't dominate
         score += data.currentStreak * 20
         score += Int(data.totalStudyTime / 60) * 10  // Minutes of study time
-        score += data.unlockedGraves.count * 30
+        score += data.unlockedShells.count * 30
         return score
     }
     

@@ -310,10 +310,10 @@ class TimerManager: ObservableObject {
             return
         }
         
-        // Create grave if not in piggybank mode (similar to app switch)
+        // Create shell if not in piggybank mode (similar to app switch)
         if let eggTitle = activeEggTitle {
-            let grave = animalManager.createGrave(for: eggTitle)
-            onEggCracked?(grave)
+            let shell = animalManager.createShell(for: eggTitle)
+            onEggCracked?(shell)
             
             // Notify friends about the cracked egg
             Task {
@@ -782,9 +782,9 @@ class TimerManager: ObservableObject {
         
         // Only crack egg if not in piggybank mode
         if !isPiggybankMode {
-            // Crack the egg - create a grave
-            let grave = animalManager.createGrave(for: eggTitle)
-            onEggCracked?(grave)
+            // Crack the egg - create a shell
+            let shell = animalManager.createShell(for: eggTitle)
+            onEggCracked?(shell)
             
             // Notify friends about the cracked egg
             Task {

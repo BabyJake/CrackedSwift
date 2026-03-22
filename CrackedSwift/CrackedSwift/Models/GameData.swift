@@ -41,15 +41,15 @@ struct GameData: Codable {
     var lastLoginDate: Date? = nil
     var currentStreak: Int = 0
     
-    // Graves (replaces UnlockedGraves)
-    var unlockedGraves: [String] = [] // Grave IDs
-    var graveEggTypes: [String: String] = [:] // Grave ID: Egg Type
-    var graveDates: [String: Date] = [:] // Grave ID: Hatch Date
+    // Shells (cracked eggs)
+    var unlockedShells: [String] = [] // Shell IDs
+    var shellEggTypes: [String: String] = [:] // Shell ID: Egg Type
+    var shellDates: [String: Date] = [:] // Shell ID: Date
     
     // Total actual study time (seconds) accumulated from successful sessions
     var totalStudyTime: TimeInterval = 0
     
-    // Grid positions for animals and graves
+    // Grid positions for animals and shells
     var animalInstances: [AnimalInstance] = []
     var originalPositions: [String: GridPosition] = [:] // For "All" view restoration
     var viewPositions: [String: [String: GridPosition]] = [:] // View-specific positions
@@ -83,9 +83,9 @@ struct GameData: Codable {
         case hatchCounts
         case lastLoginDate
         case currentStreak
-        case unlockedGraves
-        case graveEggTypes
-        case graveDates
+        case unlockedShells = "unlockedGraves"
+        case shellEggTypes = "graveEggTypes"
+        case shellDates = "graveDates"
         case totalStudyTime
         case animalInstances
         case originalPositions
@@ -124,9 +124,9 @@ struct GameData: Codable {
         lastLoginDate           = try? c.decode(Date.self, forKey: .lastLoginDate)
         currentStreak           = (try? c.decode(Int.self, forKey: .currentStreak)) ?? 0
         
-        unlockedGraves          = (try? c.decode([String].self, forKey: .unlockedGraves)) ?? []
-        graveEggTypes           = (try? c.decode([String: String].self, forKey: .graveEggTypes)) ?? [:]
-        graveDates              = (try? c.decode([String: Date].self, forKey: .graveDates)) ?? [:]
+        unlockedShells          = (try? c.decode([String].self, forKey: .unlockedShells)) ?? []
+        shellEggTypes           = (try? c.decode([String: String].self, forKey: .shellEggTypes)) ?? [:]
+        shellDates              = (try? c.decode([String: Date].self, forKey: .shellDates)) ?? [:]
         
         totalStudyTime          = (try? c.decode(TimeInterval.self, forKey: .totalStudyTime)) ?? 0
         animalInstances         = (try? c.decode([AnimalInstance].self, forKey: .animalInstances)) ?? []
@@ -210,20 +210,22 @@ struct GameData: Codable {
         var gridPosition: GridPosition
         let hatchDate: Date
         var isNewlyHatched: Bool
-        let isGrave: Bool
+        let isShell: Bool
         let eggType: String?
         
         enum CodingKeys: String, CodingKey {
-            case id, animalName, gridPosition, hatchDate, isNewlyHatched, isGrave, eggType
+            case id, animalName, gridPosition, hatchDate, isNewlyHatched
+            case isShell = "isGrave"
+            case eggType
         }
         
-        init(id: String, animalName: String, gridPosition: GridPosition, hatchDate: Date, isNewlyHatched: Bool, isGrave: Bool, eggType: String?) {
+        init(id: String, animalName: String, gridPosition: GridPosition, hatchDate: Date, isNewlyHatched: Bool, isShell: Bool, eggType: String?) {
             self.id = id
             self.animalName = animalName
             self.gridPosition = gridPosition
             self.hatchDate = hatchDate
             self.isNewlyHatched = isNewlyHatched
-            self.isGrave = isGrave
+            self.isShell = isShell
             self.eggType = eggType
         }
         
@@ -234,7 +236,7 @@ struct GameData: Codable {
             gridPosition  = (try? c.decode(GridPosition.self, forKey: .gridPosition)) ?? GridPosition(x: 0, y: 0)
             hatchDate     = (try? c.decode(Date.self, forKey: .hatchDate)) ?? Date()
             isNewlyHatched = (try? c.decode(Bool.self, forKey: .isNewlyHatched)) ?? false
-            isGrave       = (try? c.decode(Bool.self, forKey: .isGrave)) ?? false
+            isShell       = (try? c.decode(Bool.self, forKey: .isShell)) ?? false
             eggType       = try? c.decode(String.self, forKey: .eggType)
         }
     }

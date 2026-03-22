@@ -1,0 +1,67 @@
+{
+  "identifier" : "F0A1B2C3-D4E5-6789-ABCD-EF0123456789",
+  "type" : "local",
+  "version" : 4,
+  "products" : [
+    {
+      "displayPrice" : "0.99",
+      "familyShareable" : false,
+      "internalID" : "1001",
+      "localizations" : [
+        {
+          "description" : "Remove a cracked shell from your sanctuary",
+          "displayName" : "Remove Shell",
+          "locale" : "en_GB"
+        }
+      ],
+      "productID" : "Cracked.CrackedSwift.removeShell",
+      "referenceName" : "Remove Shell",
+      "type" : "Consumable"
+    }
+  ],
+  "settings" : {
+    "_applicationInternalID" : "0",
+    "_developerTeamID" : "",
+    "_failTransactionsEnabled" : false,
+    "_locale" : "en_GB",
+    "_storefront" : "GBR",
+    "_storeKitErrors" : [
+      {
+        "current" : null,
+        "setting" : "expire-subscription"
+      },
+      {
+        "current" : null,
+        "setting" : "fetch-policy"
+      },
+      {
+        "current" : null,
+        "setting" : "manage-subscription"
+      },
+      {
+        "current" : null,
+        "setting" : "product"
+      },
+      {
+        "current" : null,
+        "setting" : "purchase"
+      },
+      {
+        "current" : null,
+        "setting" : "renewal"
+      },
+      {
+        "current" : null,
+        "setting" : "storefront"
+      },
+      {
+        "current" : null,
+        "setting" : "subscription-status"
+      },
+      {
+        "current" : null,
+        "setting" : "verify-transaction"
+      }
+    ]
+  }
+}

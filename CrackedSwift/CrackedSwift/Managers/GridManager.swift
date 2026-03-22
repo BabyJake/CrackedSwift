@@ -178,7 +178,7 @@ class GridManager: ObservableObject {
                 gridPosition: randomPosition,
                 hatchDate: hatchDate,
                 isNewlyHatched: isNewlyHatched,
-                isGrave: false,
+                isShell: false,
                 eggType: eggType
             )
 
@@ -189,7 +189,7 @@ class GridManager: ObservableObject {
         }
     }
     
-    func placeGrave(graveId: String, eggType: String, hatchDate: Date) -> GameData.GridPosition? {
+    func placeShell(shellId: String, eggType: String, hatchDate: Date) -> GameData.GridPosition? {
         while true {
             expandGridIfNeeded(reserveSlots: 1)
 
@@ -205,17 +205,17 @@ class GridManager: ObservableObject {
             let randomPosition = emptyPositions.randomElement()!
 
             let instance = GameData.AnimalInstance(
-                id: graveId,
-                animalName: "Grave",
+                id: shellId,
+                animalName: "Shell",
                 gridPosition: randomPosition,
                 hatchDate: hatchDate,
                 isNewlyHatched: false,
-                isGrave: true,
+                isShell: true,
                 eggType: eggType
             )
 
             dataManager.addAnimalInstance(instance)
-            dataManager.setOriginalPosition(graveId, position: randomPosition)
+            dataManager.setOriginalPosition(shellId, position: randomPosition)
 
             return randomPosition
         }

@@ -140,6 +140,12 @@ class GameDataManager: ObservableObject {
         return gameData.currentSelectedEgg
     }
     
+    func clearCurrentEgg() {
+        gameData.currentSelectedEgg = nil
+        gameData.currentSelectedEggInstanceId = nil
+        saveGameData()
+    }
+    
     func getCurrentEggInstanceId() -> String? {
         return gameData.currentSelectedEggInstanceId
     }
@@ -324,25 +330,46 @@ class GameDataManager: ObservableObject {
             .reduce(0) { $0 + $1.count }
     }
     
-    // MARK: - Graves
+    // MARK: - Shells
     
-    func addGrave(graveId: String, eggType: String, hatchDate: Date) {
-        if !gameData.unlockedGraves.contains(graveId) {
-            gameData.unlockedGraves.append(graveId)
-            gameData.graveEggTypes[graveId] = eggType
-            gameData.graveDates[graveId] = hatchDate
+    func addShell(shellId: String, eggType: String, hatchDate: Date) {
+        if !gameData.unlockedShells.contains(shellId) {
+            gameData.unlockedShells.append(shellId)
+            gameData.shellEggTypes[shellId] = eggType
+            gameData.shellDates[shellId] = hatchDate
             saveGameData()
         }
     }
     
-    func getGraves() -> [(id: String, eggType: String, date: Date)] {
-        return gameData.unlockedGraves.compactMap { graveId in
-            guard let eggType = gameData.graveEggTypes[graveId],
-                  let date = gameData.graveDates[graveId] else {
+    func getShells() -> [(id: String, eggType: String, date: Date)] {
+        return gameData.unlockedShells.compactMap { shellId in
+            guard let eggType = gameData.shellEggTypes[shellId],
+                  let date = gameData.shellDates[shellId] else {
                 return nil
             }
-            return (graveId, eggType, date)
+            return (shellId, eggType, date)
         }
+    }
+    
+    /// Removes a shell from all data stores (called after successful IAP).
+    func removeShell(instanceId: String) {
+        // Remove from grid instances
+        gameData.animalInstances.removeAll { $0.id == instanceId && $0.isShell }
+        
+        // Remove from shell tracking arrays
+        gameData.unlockedShells.removeAll { $0 == instanceId }
+        gameData.shellEggTypes.removeValue(forKey: instanceId)
+        gameData.shellDates.removeValue(forKey: instanceId)
+        
+        // Remove any stored positions
+        gameData.originalPositions.removeValue(forKey: instanceId)
+        for view in gameData.viewPositions.keys {
+            gameData.viewPositions[view]?.removeValue(forKey: instanceId)
+        }
+        
+        saveGameData()
+        objectWillChange.send()
+        print("🥚🗑️ GameDataManager: Removed shell \(instanceId)")
     }
     
     // MARK: - Grid Management
@@ -435,12 +462,12 @@ class GameDataManager: ObservableObject {
         saveGameData()
     }
     
-    func processUnlockedGraves() {
-        for graveId in gameData.unlockedGraves {
-            if !gameData.animalInstances.contains(where: { $0.id == graveId && $0.isGrave }) {
-                if let eggType = gameData.graveEggTypes[graveId],
-                   let hatchDate = gameData.graveDates[graveId] {
-                    _ = GridManager.shared.placeGrave(graveId: graveId, eggType: eggType, hatchDate: hatchDate)
+    func processUnlockedShells() {
+        for shellId in gameData.unlockedShells {
+            if !gameData.animalInstances.contains(where: { $0.id == shellId && $0.isShell }) {
+                if let eggType = gameData.shellEggTypes[shellId],
+                   let hatchDate = gameData.shellDates[shellId] {
+                    _ = GridManager.shared.placeShell(shellId: shellId, eggType: eggType, hatchDate: hatchDate)
                 }
             }
         }
@@ -571,9 +598,9 @@ class GameDataManager: ObservableObject {
         gameData.unlockedAnimals.removeAll()
         gameData.animalInstances.removeAll()
         gameData.pendingAnimals.removeAll()
-        gameData.unlockedGraves.removeAll()
-        gameData.graveEggTypes.removeAll()
-        gameData.graveDates.removeAll()
+        gameData.unlockedShells.removeAll()
+        gameData.shellEggTypes.removeAll()
+        gameData.shellDates.removeAll()
         gameData.originalPositions.removeAll()
         gameData.viewPositions.removeAll()
         saveGameData()

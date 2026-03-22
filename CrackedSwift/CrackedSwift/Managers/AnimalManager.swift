@@ -7,6 +7,12 @@
 
 import Foundation
 
+/// Rarity tier spawn percentage for display purposes (e.g. rarity ring)
+struct RarityTierChance: Equatable {
+    let rarity: AnimalRarity
+    let percentage: Double // 0.0 to 1.0
+}
+
 @MainActor
 final class AnimalManager: ObservableObject {
     static let shared = AnimalManager()
@@ -80,25 +86,49 @@ final class AnimalManager: ObservableObject {
         // Long study (30-60 min): +6% rare, +4% epic, +2% legendary
         // Very long study (60+ min): +10% rare, +8% epic, +5% legendary
         
+        var uncommonBoost: Double = 0.0
         var rareBoost: Double = 0.0
         var epicBoost: Double = 0.0
         var legendaryBoost: Double = 0.0
         var mythicBoost: Double = 0.0
         
-        if studyMinutes >= 60 {
-            rareBoost = 0.10
-            epicBoost = 0.08
+        // Progressive boosts: longer sessions give a small edge on rarer spawns
+        // Kept conservative so mythics/legendaries stay genuinely rare
+        if studyMinutes >= 90 {
+            uncommonBoost = 0.18
+            rareBoost = 0.22
+            epicBoost = 0.16
+            legendaryBoost = 0.10
+            mythicBoost = 0.04
+        } else if studyMinutes >= 60 {
+            uncommonBoost = 0.14
+            rareBoost = 0.18
+            epicBoost = 0.12
+            legendaryBoost = 0.07
+            mythicBoost = 0.025
+        } else if studyMinutes >= 45 {
+            uncommonBoost = 0.11
+            rareBoost = 0.14
+            epicBoost = 0.09
             legendaryBoost = 0.05
-            mythicBoost = 0.01
+            mythicBoost = 0.015
         } else if studyMinutes >= 30 {
+            uncommonBoost = 0.08
+            rareBoost = 0.10
+            epicBoost = 0.06
+            legendaryBoost = 0.03
+            mythicBoost = 0.008
+        } else if studyMinutes >= 20 {
+            uncommonBoost = 0.05
             rareBoost = 0.06
-            epicBoost = 0.04
-            legendaryBoost = 0.02
-            mythicBoost = 0.005
-        } else if studyMinutes >= 15 {
+            epicBoost = 0.03
+            legendaryBoost = 0.015
+            mythicBoost = 0.004
+        } else if studyMinutes >= 10 {
+            uncommonBoost = 0.03
             rareBoost = 0.03
-            epicBoost = 0.02
-            legendaryBoost = 0.01
+            epicBoost = 0.015
+            legendaryBoost = 0.008
             mythicBoost = 0.002
         }
         
@@ -145,11 +175,10 @@ final class AnimalManager: ObservableObject {
             case .mythic:
                 adjustedChance = normalizedChance * (1.0 + mythicBoost)
             case .uncommon:
-                // Treat uncommon similarly to rare for boost purposes
-                adjustedChance = normalizedChance * (1.0 + rareBoost * 0.5)
+                adjustedChance = normalizedChance * (1.0 + uncommonBoost)
             case .common:
                 // Reduce common animals proportionally to make room for boosted rarities
-                let reductionFactor = 1.0 - (rareBoost * 0.3 + epicBoost * 0.2 + legendaryBoost * 0.1 + mythicBoost * 0.05)
+                let reductionFactor = 1.0 - (uncommonBoost * 0.15 + rareBoost * 0.25 + epicBoost * 0.2 + legendaryBoost * 0.1 + mythicBoost * 0.05)
                 adjustedChance = normalizedChance * max(0.1, reductionFactor) // Keep at least 10% of original
             }
             
@@ -187,15 +216,41 @@ final class AnimalManager: ObservableObject {
         return AnimalDatabase.getImageName(for: animalName)
     }
     
-    // MARK: - Graves
+    // MARK: - Shells
     
-    func createGrave(for eggType: String) -> Animal {
-        let graveId = "Grave_\(Date().timeIntervalSince1970)"
-        let graveDate = Date()
+    func createShell(for eggType: String) -> Animal {
+        let shellId = "Shell_\(Date().timeIntervalSince1970)"
+        let shellDate = Date()
         
-        dataManager.addGrave(graveId: graveId, eggType: eggType, hatchDate: graveDate)
+        dataManager.addShell(shellId: shellId, eggType: eggType, hatchDate: shellDate)
         
-        return Animal(graveId: graveId, eggType: eggType, hatchDate: graveDate)
+        return Animal(shellId: shellId, eggType: eggType, hatchDate: shellDate)
+    }
+    
+    // MARK: - Rarity Distribution
+    
+    /// Returns the rarity tier distribution for a given egg and study duration.
+    /// Used by RarityRingView to visualize spawn chances.
+    func getRarityDistribution(eggTitle: String, studyMinutes: Double) -> [RarityTierChance] {
+        guard let egg = shopManager.getEggByTitle(eggTitle) else { return [] }
+        
+        let adjustedChances = adjustSpawnChancesForDuration(egg.animalSpawnChances, studyMinutes: studyMinutes)
+        let total = adjustedChances.reduce(0.0) { $0 + $1.spawnChance }
+        guard total > 0 else { return [] }
+        
+        // Sum spawn chances by rarity tier
+        var rarityTotals: [AnimalRarity: Double] = [:]
+        for chance in adjustedChances {
+            if let animalData = AnimalDatabase.getAnimalData(for: chance.animalName) {
+                rarityTotals[animalData.rarity, default: 0] += chance.spawnChance
+            }
+        }
+        
+        // Build ordered result — always include all 6 rarities for smooth animation
+        let order: [AnimalRarity] = [.common, .uncommon, .rare, .epic, .legendary, .mythic]
+        return order.map { rarity in
+            RarityTierChance(rarity: rarity, percentage: (rarityTotals[rarity] ?? 0) / total)
+        }
     }
     
     // MARK: - Unlocked Animals

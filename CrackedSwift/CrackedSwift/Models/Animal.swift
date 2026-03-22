@@ -13,7 +13,7 @@ struct Animal: Identifiable, Codable {
     let imageName: String // Name of asset in Assets.xcassets
     let hatchDate: Date
     let isNewlyHatched: Bool
-    let isGrave: Bool
+    let isShell: Bool
     let eggType: String? // "FarmEgg", "JungleEgg", etc.
     
     init(name: String, imageName: String, eggType: String? = nil) {
@@ -22,18 +22,18 @@ struct Animal: Identifiable, Codable {
         self.imageName = imageName
         self.hatchDate = Date()
         self.isNewlyHatched = true
-        self.isGrave = false
+        self.isShell = false
         self.eggType = eggType
     }
     
-    // For graves
-    init(graveId: String, eggType: String, hatchDate: Date) {
-        self.id = graveId
-        self.name = "Grave"
-        self.imageName = "grave"
+    // For shells (cracked eggs)
+    init(shellId: String, eggType: String, hatchDate: Date) {
+        self.id = shellId
+        self.name = "Shell"
+        self.imageName = "shell"
         self.hatchDate = hatchDate
         self.isNewlyHatched = false
-        self.isGrave = true
+        self.isShell = true
         self.eggType = eggType
     }
 }

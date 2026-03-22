@@ -1,0 +1,4 @@
+{"data":{"timeRemaining":0,"appSwitchDetected":false,"wasLockedDuringBackground":false,"activeEggTitle":"nil","backgroundStartTime":0},"timestamp":1774198995033,"location":"TimerManager.swift:532","message":"handleAppForegrounded entry"}
+{"timestamp":1774198995035,"data":{},"location":"TimerManager.swift:547","message":"No active session early return"}
+{"data":{"wasLockedDuringBackground":false,"appSwitchDetected":false,"timeRemaining":0,"backgroundStartTime":0,"activeEggTitle":"nil"},"message":"handleAppForegrounded entry","location":"TimerManager.swift:532","timestamp":1774199000848}
+{"timestamp":1774199000848,"location":"TimerManager.swift:547","data":{},"message":"No active session early return"}

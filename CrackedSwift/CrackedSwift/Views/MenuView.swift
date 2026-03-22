@@ -21,14 +21,17 @@ struct MenuView: View {
     @State private var coinsEarned = 0
     @State private var showingGiveUpAlert = false
     @State private var showingEggCrackedAlert = false
-    @State private var crackedGrave: Animal?
-    @State private var isGiveUpGrave = false
+    @State private var crackedShell: Animal?
+    @State private var isGiveUpShell = false
     @State private var showingNoEggAlert = false
     @State private var initialTimerDuration: TimeInterval = 0
     @State private var showingStreakRewards = false
     @State private var showingPiggybankShatteredAlert = false
     @State private var showingPiggybankResult = false
     @State private var showingAccount = false
+    @State private var sliderIsDragging = false
+    @State private var showRarityRing = false
+    @State private var ringFadeWorkItem: DispatchWorkItem?
     // Screen Time settings UI commented out — using Darwin lock detection instead.
     // @State private var showingSettings = false
     
@@ -43,6 +46,13 @@ struct MenuView: View {
             }
         }
         return "FarmEgg" // Default fallback
+    }
+    
+    // Rarity distribution for the ring (empty for Piggybank)
+    private var currentRarityDistribution: [RarityTierChance] {
+        let currentEggTitle = shopManager.getCurrentEgg() ?? "FarmEgg"
+        if currentEggTitle == "Piggybank" { return [] }
+        return animalManager.getRarityDistribution(eggTitle: currentEggTitle, studyMinutes: Double(selectedMinutes))
     }
     
     var body: some View {
@@ -142,7 +152,7 @@ struct MenuView: View {
                             
                             let duration = TimeInterval(selectedMinutes * 60)
                             initialTimerDuration = duration
-                            isGiveUpGrave = false // Reset flag when starting new timer
+                            isGiveUpShell = false // Reset flag when starting new timer
                             
                             // Set up callbacks
                             timerManager.onTimerComplete = { studyDuration in
@@ -151,9 +161,9 @@ struct MenuView: View {
                             timerManager.onCoinsAwarded = { coins in
                                 coinsEarned = coins
                             }
-                            timerManager.onEggCracked = { grave in
-                                crackedGrave = grave
-                                // isGiveUpGrave is already set in the give up button action
+                            timerManager.onEggCracked = { shell in
+                                crackedShell = shell
+                                // isGiveUpShell is already set in the give up button action
                                 showingEggCrackedAlert = true
                                 initialTimerDuration = 0
                             }
@@ -192,37 +202,59 @@ struct MenuView: View {
                         }
                     }
                     
-                    // Egg Selection Button (only show when timer is not running)
-                    if !timerManager.isTimerRunning {
-                        Button(action: {
-                            showingEggSelection = true
-                        }) {
-                            HStack {
-                                Text("Current Egg: \(shopManager.getCurrentEgg() ?? "None")")
-                                Image(systemName: "chevron.right")
-                            }
-                            .font(.subheadline)
-                            .foregroundColor(.white)
-                        }
-                    }
                 }
                 .padding(.bottom, 100)
                 
                 Spacer()
                 
-                // Circular slider with draggable knob
-                CircularSlider(
-                    selectedMinutes: $selectedMinutes,
-                    isTimerRunning: $timerManager.isTimerRunning,
-                    timeRemaining: timerManager.timeRemaining,
-                    initialDuration: initialTimerDuration,
-                    currentEggImageName: currentEggImageName
-                )
-                    .padding(.bottom, 40)
+                // Circular slider with rarity ring
+                VStack(spacing: 8) {
+                    ZStack {
+                        // Rarity chance ring (outermost) — fades in on drag, fades out after
+                        if !currentRarityDistribution.isEmpty {
+                            RarityRingView(distribution: currentRarityDistribution)
+                                .opacity(showRarityRing ? 1 : 0)
+                                .animation(.easeInOut(duration: 0.35), value: showRarityRing)
+                        }
+                        
+                        CircularSlider(
+                            selectedMinutes: $selectedMinutes,
+                            isTimerRunning: $timerManager.isTimerRunning,
+                            isDragging: $sliderIsDragging,
+                            timeRemaining: timerManager.timeRemaining,
+                            initialDuration: initialTimerDuration,
+                            currentEggImageName: currentEggImageName,
+                            hasEggSelected: shopManager.getCurrentEgg() != nil,
+                            onEggTap: { showingEggSelection = true }
+                        )
+                    }
+                    .frame(width: 330, height: 330)
+                    .onChange(of: sliderIsDragging) { _, dragging in
+                        ringFadeWorkItem?.cancel()
+                        if dragging {
+                            withAnimation { showRarityRing = true }
+                        } else {
+                            // Fade out after 1.5 seconds of inactivity
+                            let work = DispatchWorkItem {
+                                withAnimation { showRarityRing = false }
+                            }
+                            ringFadeWorkItem = work
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: work)
+                        }
+                    }
+                    
+                    // Rarity legend — also fades with ring
+                    if !timerManager.isTimerRunning && !currentRarityDistribution.isEmpty {
+                        RarityLegendView(distribution: currentRarityDistribution)
+                            .opacity(showRarityRing ? 1 : 0)
+                            .animation(.easeInOut(duration: 0.35), value: showRarityRing)
+                    }
+                }
+                .padding(.bottom, 20)
             }
             .alert("Give Up Session?", isPresented: $showingGiveUpAlert) {
                 Button("Yes", role: .destructive) {
-                    isGiveUpGrave = true
+                    isGiveUpShell = true
                     timerManager.giveUpSession()
                     initialTimerDuration = 0
                 }
@@ -239,18 +271,18 @@ struct MenuView: View {
             }
             .alert("Egg Cracked!", isPresented: $showingEggCrackedAlert) {
                 Button("OK") {
-                    crackedGrave = nil
-                    isGiveUpGrave = false
+                    crackedShell = nil
+                    isGiveUpShell = false
                 }
             } message: {
-                if let grave = crackedGrave {
-                    if isGiveUpGrave {
-                        Text("You gave up on your study session. Your egg has cracked and became a grave. You did not receive any coins.")
+                if let shell = crackedShell {
+                    if isGiveUpShell {
+                        Text("You gave up on your session. Your egg cracked and left behind a shell. No coins were earned.")
                     } else {
-                        Text("You left the app while studying. Your egg has cracked and became a grave. You earned partial coins for the time you spent.")
+                        Text("You left the app during your session. Your egg cracked and left behind a shell. You earned partial coins for the time you focused.")
                     }
                 } else {
-                    Text("You left the app while studying. Your egg has cracked.")
+                    Text("You left the app during your session. Your egg has cracked.")
                 }
             }
             .alert("No Egg Available", isPresented: $showingNoEggAlert) {
@@ -289,6 +321,7 @@ struct MenuView: View {
             hatchedAnimal = nil
             showingHatchResult = false
             showingPiggybankResult = true
+            gameData.clearCurrentEgg()
             initialTimerDuration = 0
             return
         }
@@ -300,13 +333,9 @@ struct MenuView: View {
             hatchedAnimal = animal
             showingHatchResult = true
             
-            // Check if the current egg type is now exhausted
-            if let currentEgg = currentEggTitle, !gameData.hasEgg(currentEgg) {
-                // No more eggs of this type, automatically select the next available egg
-                if let nextEgg = shopManager.getNextAvailableEgg(excluding: currentEgg) {
-                    shopManager.selectEgg(nextEgg)
-                }
-            }
+            // Egg was consumed — clear selection so EmptyEgg shows in the nest
+            // User must pick a new egg before starting another session
+            gameData.clearCurrentEgg()
         }
         initialTimerDuration = 0
     }
@@ -479,6 +508,9 @@ struct HatchResultView: View {
     let animal: Animal
     let coinsEarned: Int
     @Environment(\.dismiss) var dismiss
+    @StateObject private var adManager = AdManager.shared
+    @State private var hasDoubledCoins = false
+    @State private var isLoadingAd = false
     
     var body: some View {
         ZStack {
@@ -529,9 +561,59 @@ struct HatchResultView: View {
                     }
                 }
                 
-                Text("+\(coinsEarned) Coins")
+                if hasDoubledCoins {
+                    VStack(spacing: 4) {
+                        Text("+\(coinsEarned) Coins")
+                            .font(.headline)
+                            .foregroundColor(.yellow)
+                        Text("+\(coinsEarned) Bonus Coins")
+                            .font(.headline)
+                            .foregroundColor(.green)
+                    }
+                } else {
+                    Text("+\(coinsEarned) Coins")
                         .font(.headline)
-                    .foregroundColor(.yellow)
+                        .foregroundColor(.yellow)
+                }
+                
+                // Watch ad to double coins
+                if !hasDoubledCoins {
+                    Button(action: {
+                        isLoadingAd = true
+                        adManager.showRewardedAd { success in
+                            isLoadingAd = false
+                            if success {
+                                GameDataManager.shared.addCoins(coinsEarned)
+                                withAnimation { hasDoubledCoins = true }
+                                print("💰 Doubled coins! +\(coinsEarned) bonus coins awarded")
+                            }
+                        }
+                    }) {
+                        HStack(spacing: 8) {
+                            if isLoadingAd {
+                                ProgressView()
+                                    .tint(.white)
+                            } else {
+                                Image(systemName: "play.rectangle.fill")
+                            }
+                            Text(isLoadingAd ? "Loading Ad..." : "Watch Ad to Double Coins")
+                        }
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .padding()
+                        .frame(maxWidth: .infinity)
+                        .background(
+                            LinearGradient(
+                                colors: [Color.orange, Color.yellow.opacity(0.8)],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .cornerRadius(10)
+                    }
+                    .padding(.horizontal, 40)
+                    .disabled(isLoadingAd || !adManager.isRewardedAdLoaded)
+                }
                 
                 Button(action: {
                     dismiss()
@@ -554,6 +636,9 @@ struct HatchResultView: View {
 struct PiggybankResultView: View {
     let coinsEarned: Int
     @Environment(\.dismiss) var dismiss
+    @StateObject private var adManager = AdManager.shared
+    @State private var hasDoubledCoins = false
+    @State private var isLoadingAd = false
     
     var body: some View {
         ZStack {
@@ -601,10 +686,62 @@ struct PiggybankResultView: View {
                 .cornerRadius(20)
                 .shadow(color: .black.opacity(0.3), radius: 10, x: 0, y: 5)
                 
-                Text("+\(coinsEarned) Coins")
-                    .font(.title)
-                    .fontWeight(.bold)
-                    .foregroundColor(.yellow)
+                if hasDoubledCoins {
+                    VStack(spacing: 4) {
+                        Text("+\(coinsEarned) Coins")
+                            .font(.title)
+                            .fontWeight(.bold)
+                            .foregroundColor(.yellow)
+                        Text("+\(coinsEarned) Bonus Coins")
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .foregroundColor(.green)
+                    }
+                } else {
+                    Text("+\(coinsEarned) Coins")
+                        .font(.title)
+                        .fontWeight(.bold)
+                        .foregroundColor(.yellow)
+                }
+                
+                // Watch ad to double coins
+                if !hasDoubledCoins {
+                    Button(action: {
+                        isLoadingAd = true
+                        adManager.showRewardedAd { success in
+                            isLoadingAd = false
+                            if success {
+                                GameDataManager.shared.addCoins(coinsEarned)
+                                withAnimation { hasDoubledCoins = true }
+                                print("💰 Doubled coins! +\(coinsEarned) bonus coins awarded")
+                            }
+                        }
+                    }) {
+                        HStack(spacing: 8) {
+                            if isLoadingAd {
+                                ProgressView()
+                                    .tint(.white)
+                            } else {
+                                Image(systemName: "play.rectangle.fill")
+                            }
+                            Text(isLoadingAd ? "Loading Ad..." : "Watch Ad to Double Coins")
+                        }
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .padding()
+                        .frame(maxWidth: .infinity)
+                        .background(
+                            LinearGradient(
+                                colors: [Color.orange, Color.yellow.opacity(0.8)],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .cornerRadius(10)
+                    }
+                    .padding(.horizontal, 40)
+                    .disabled(isLoadingAd || !adManager.isRewardedAdLoaded)
+                }
                 
                 Button(action: {
                     dismiss()
