@@ -2,3 +2,35 @@
 {"timestamp":1774198995035,"data":{},"location":"TimerManager.swift:547","message":"No active session early return"}
 {"data":{"wasLockedDuringBackground":false,"appSwitchDetected":false,"timeRemaining":0,"backgroundStartTime":0,"activeEggTitle":"nil"},"message":"handleAppForegrounded entry","location":"TimerManager.swift:532","timestamp":1774199000848}
 {"timestamp":1774199000848,"location":"TimerManager.swift:547","data":{},"message":"No active session early return"}
+{"message":"handleAppForegrounded entry","location":"TimerManager.swift:532","data":{"activeEggTitle":"nil","timeRemaining":0,"backgroundStartTime":0,"appSwitchDetected":false,"wasLockedDuringBackground":false},"timestamp":1774199687072}
+{"location":"TimerManager.swift:547","data":{},"timestamp":1774199687073,"message":"No active session early return"}
+{"message":"handleAppForegrounded entry","data":{"wasLockedDuringBackground":false,"appSwitchDetected":false,"activeEggTitle":"nil","backgroundStartTime":0,"timeRemaining":0},"timestamp":1774204824808,"location":"TimerManager.swift:532"}
+{"location":"TimerManager.swift:547","timestamp":1774204824809,"data":{},"message":"No active session early return"}
+{"data":{"appSwitchDetected":false,"wasLockedDuringBackground":false,"timeRemaining":0,"backgroundStartTime":0,"activeEggTitle":"nil"},"timestamp":1774205010752,"message":"handleAppForegrounded entry","location":"TimerManager.swift:532"}
+{"timestamp":1774205010753,"message":"No active session early return","location":"TimerManager.swift:547","data":{}}
+{"timestamp":1774207734974,"message":"handleAppForegrounded entry","location":"TimerManager.swift:532","data":{"wasLockedDuringBackground":false,"appSwitchDetected":false,"timeRemaining":0,"activeEggTitle":"nil","backgroundStartTime":0}}
+{"location":"TimerManager.swift:547","message":"No active session early return","data":{},"timestamp":1774207734975}
+{"location":"TimerManager.swift:532","message":"handleAppForegrounded entry","data":{"activeEggTitle":"nil","backgroundStartTime":0,"wasLockedDuringBackground":false,"appSwitchDetected":false,"timeRemaining":0},"timestamp":1774208093453}
+{"data":{},"location":"TimerManager.swift:547","message":"No active session early return","timestamp":1774208093454}
+{"timestamp":1774208272115,"location":"TimerManager.swift:532","message":"handleAppForegrounded entry","data":{"wasLockedDuringBackground":false,"appSwitchDetected":false,"activeEggTitle":"nil","timeRemaining":0,"backgroundStartTime":0}}
+{"data":{},"timestamp":1774208272116,"location":"TimerManager.swift:547","message":"No active session early return"}
+{"data":{"appSwitchDetected":false,"timeRemaining":0,"activeEggTitle":"nil","backgroundStartTime":0,"wasLockedDuringBackground":false},"timestamp":1774208467847,"location":"TimerManager.swift:532","message":"handleAppForegrounded entry"}
+{"timestamp":1774208467848,"location":"TimerManager.swift:547","message":"No active session early return","data":{}}
+{"data":{"timeRemaining":0,"wasLockedDuringBackground":false,"activeEggTitle":"nil","appSwitchDetected":false,"backgroundStartTime":0},"message":"handleAppForegrounded entry","location":"TimerManager.swift:532","timestamp":1774208714890}
+{"location":"TimerManager.swift:547","message":"No active session early return","timestamp":1774208714891,"data":{}}
+{"timestamp":1774208919226,"location":"TimerManager.swift:532","message":"handleAppForegrounded entry","data":{"activeEggTitle":"nil","timeRemaining":0,"backgroundStartTime":0,"wasLockedDuringBackground":false,"appSwitchDetected":false}}
+{"data":{},"location":"TimerManager.swift:547","message":"No active session early return","timestamp":1774208919227}
+{"message":"handleAppForegrounded entry","location":"TimerManager.swift:532","data":{"activeEggTitle":"nil","wasLockedDuringBackground":false,"timeRemaining":0,"backgroundStartTime":0,"appSwitchDetected":false},"timestamp":1774212387949}
+{"data":{},"location":"TimerManager.swift:547","message":"No active session early return","timestamp":1774212387951}
+{"location":"TimerManager.swift:532","data":{"wasLockedDuringBackground":false,"appSwitchDetected":false,"activeEggTitle":"nil","timeRemaining":0,"backgroundStartTime":0},"message":"handleAppForegrounded entry","timestamp":1774219588764}
+{"data":{},"location":"TimerManager.swift:547","message":"No active session early return","timestamp":1774219588766}
+{"data":{"backgroundStartTime":0,"wasLockedDuringBackground":false,"activeEggTitle":"nil","timeRemaining":0,"appSwitchDetected":false},"location":"TimerManager.swift:532","timestamp":1774220061530,"message":"handleAppForegrounded entry"}
+{"location":"TimerManager.swift:547","timestamp":1774220061531,"message":"No active session early return","data":{}}
+{"timestamp":1774220831671,"location":"TimerManager.swift:532","message":"handleAppForegrounded entry","data":{"timeRemaining":0,"wasLockedDuringBackground":false,"appSwitchDetected":false,"backgroundStartTime":0,"activeEggTitle":"nil"}}
+{"location":"TimerManager.swift:547","message":"No active session early return","timestamp":1774220831672,"data":{}}
+{"timestamp":1774220875640,"location":"TimerManager.swift:532","message":"handleAppForegrounded entry","data":{"backgroundStartTime":0,"wasLockedDuringBackground":false,"appSwitchDetected":false,"activeEggTitle":"nil","timeRemaining":0}}
+{"message":"No active session early return","timestamp":1774220875641,"location":"TimerManager.swift:547","data":{}}
+{"message":"handleAppForegrounded entry","data":{"appSwitchDetected":false,"backgroundStartTime":0,"activeEggTitle":"nil","timeRemaining":0,"wasLockedDuringBackground":false},"timestamp":1774220879288,"location":"TimerManager.swift:532"}
+{"data":{},"message":"No active session early return","timestamp":1774220879289,"location":"TimerManager.swift:547"}
+{"message":"handleAppForegrounded entry","data":{"appSwitchDetected":false,"timeRemaining":0,"wasLockedDuringBackground":false,"activeEggTitle":"nil","backgroundStartTime":0},"location":"TimerManager.swift:532","timestamp":1774221328457}
+{"location":"TimerManager.swift:547","message":"No active session early return","timestamp":1774221328458,"data":{}}

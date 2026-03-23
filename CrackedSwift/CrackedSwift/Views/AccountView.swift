@@ -89,7 +89,7 @@ struct AccountView: View {
                     Text("Profile")
                         .foregroundColor(.white.opacity(0.8))
                 }
-                .listRowBackground(Color.white.opacity(0.1))
+                .listRowBackground(Color.clear)
                 
                 // Stats section
                 Section {
@@ -129,7 +129,7 @@ struct AccountView: View {
                     Text("Stats")
                         .foregroundColor(.white.opacity(0.8))
                 }
-                .listRowBackground(Color.white.opacity(0.1))
+                .listRowBackground(Color.clear)
                 
                 // iCloud sync section
                 Section {
@@ -190,7 +190,7 @@ struct AccountView: View {
                     Text("Cloud Backup")
                         .foregroundColor(.white.opacity(0.8))
                 }
-                .listRowBackground(Color.white.opacity(0.1))
+                .listRowBackground(Color.clear)
                 
                 // Sign out section
                 Section {
@@ -206,7 +206,7 @@ struct AccountView: View {
                         }
                     }
                 }
-                .listRowBackground(Color.white.opacity(0.1))
+                .listRowBackground(Color.clear)
             }
             .scrollContentBackground(.hidden)
             .listStyle(.insetGrouped)

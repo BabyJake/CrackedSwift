@@ -717,4 +717,5 @@ class LeaderboardManager: ObservableObject {
             return "\(entry.totalCoins)"
         }
     }
+    
 }

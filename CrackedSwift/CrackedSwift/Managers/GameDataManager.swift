@@ -28,8 +28,8 @@ class GameDataManager: ObservableObject {
            let decoded = try? JSONDecoder().decode(GameData.self, from: data) {
             self.gameData = decoded
         } else {
-            // New player - start with 9 FarmEggs (temp for testing)
-            gameData.purchasedEggs["FarmEgg"] = 9
+            // New player - start with 1 FarmEgg
+            gameData.purchasedEggs["FarmEgg"] = 1
             gameData.currentSelectedEgg = "FarmEgg"
             // Save locally only — don't push starter data to cloud
             // (syncOnLaunch will handle cloud restore vs push)
@@ -521,10 +521,16 @@ class GameDataManager: ObservableObject {
             gameData.lastLoginDate = today
             let reward = calculateStreakReward(streak: gameData.currentStreak)
             addCoins(reward)
+            // Grant milestone egg if applicable
+            let milestoneReward = getPotentialReward(for: gameData.currentStreak)
+            if let egg = milestoneReward.egg {
+                purchaseEgg(egg)
+            }
             saveGameData()
             objectWillChange.send() // Trigger view update
             if !silent {
-                streakAlertInfo = (show: true, streak: gameData.currentStreak, reward: reward, message: "Day \(gameData.currentStreak) of your study streak! 🔥")
+                let eggNote = milestoneReward.egg != nil ? "\nBonus: Free \(milestoneReward.egg!) 🥚" : ""
+                streakAlertInfo = (show: true, streak: gameData.currentStreak, reward: reward, message: "Day \(gameData.currentStreak) of your study streak! 🔥\(eggNote)")
             }
             return
         }
@@ -547,27 +553,27 @@ class GameDataManager: ObservableObject {
         streakAlertInfo = nil
     }
     
-    /// Calculates the reward coins based on streak length
-    /// Rewards scale up: 100 coins for day 1, then 20 for day 2, etc.
-    /// Special bonuses at milestones (7, 14, 30 days)
+    /// Calculates the reward coins based on streak length.
+    /// Flat daily coins with big milestone bonuses at days 3, 7, 14 and 30.
     private func calculateStreakReward(streak: Int) -> Int {
-        // Day 1 is a bigger "welcome" reward.
-        if streak == 1 {
-            return 100
+        // Day 1 welcome reward
+        if streak == 1 { return 100 }
+
+        // Base: 25 coins every day
+        var reward = 25
+
+        // Milestone bonuses (exact-day hits)
+        switch streak {
+        case 3:  reward += 75   // Day 3 milestone
+        case 7:  reward += 150  // Week milestone
+        case 14: reward += 300  // Two-week milestone
+        case 30: reward += 500  // Month milestone
+        default: break
         }
-        
-        // Base reward: 10 coins per day (day 2 = 20, day 3 = 30, ...)
-        var reward = streak * 10
-        
-        // Milestone bonuses
-        if streak >= 30 {
-            reward += 200 // 30-day milestone bonus
-        } else if streak >= 14 {
-            reward += 100 // 14-day milestone bonus
-        } else if streak >= 7 {
-            reward += 50 // 7-day milestone bonus
-        }
-        
+
+        // Ongoing scaling: +5 coins for every full week in the streak
+        reward += (streak / 7) * 5
+
         return reward
     }
     
@@ -579,11 +585,19 @@ class GameDataManager: ObservableObject {
         return gameData.lastLoginDate
     }
     
-    /// Gets the potential reward for a given streak day
+    /// Gets the potential reward for a given streak day.
+    /// Milestone days award a free egg alongside coins.
     func getPotentialReward(for streak: Int) -> (coins: Int, egg: String?) {
         let coins = calculateStreakReward(streak: streak)
-        // Day 1 gets FarmEgg
-        let egg = streak == 1 ? "FarmEgg" : nil
+        let egg: String?
+        switch streak {
+        case 1:  egg = "FarmEgg"
+        case 3:  egg = "FarmEgg"
+        case 7:  egg = "JungleEgg"
+        case 14: egg = "JungleEgg"
+        case 30: egg = "ArticEgg"
+        default: egg = nil
+        }
         return (coins, egg)
     }
     
@@ -594,16 +608,6 @@ class GameDataManager: ObservableObject {
         saveGameData()
     }
     
-    func clearAllAnimals() {
-        gameData.unlockedAnimals.removeAll()
-        gameData.animalInstances.removeAll()
-        gameData.pendingAnimals.removeAll()
-        gameData.unlockedShells.removeAll()
-        gameData.shellEggTypes.removeAll()
-        gameData.shellDates.removeAll()
-        gameData.originalPositions.removeAll()
-        gameData.viewPositions.removeAll()
-        saveGameData()
-    }
+
 }
 

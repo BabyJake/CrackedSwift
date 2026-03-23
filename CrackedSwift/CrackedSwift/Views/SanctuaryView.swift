@@ -544,7 +544,6 @@ struct ShellCard: View {
                 Image("shell")
                     .resizable()
                     .scaledToFit()
-                    .colorMultiply(shellColor)
             } else {
                 VStack(spacing: 0) {
                     Image(systemName: "egg.fill")
@@ -552,17 +551,10 @@ struct ShellCard: View {
                     RoundedRectangle(cornerRadius: 8)
                         .frame(height: 40)
                 }
-                .foregroundColor(shellColor)
+                .foregroundColor(.gray)
             }
         }
         .shadow(radius: 2)
-    }
-    
-    private var shellColor: Color {
-        if instance.eggType == "JungleEgg" {
-            return Color(red: 0.341, green: 0.818, blue: 1.0)
-        }
-        return Color.gray
     }
 }
 
@@ -913,7 +905,6 @@ struct AnimalDetailSheet: View {
                     .resizable()
                     .scaledToFit()
                     .frame(width: 100, height: 100)
-                    .colorMultiply(shellColor)
             } else {
                 Image(systemName: "egg.fill")
                     .font(.system(size: 60))
@@ -1011,13 +1002,6 @@ struct AnimalDetailSheet: View {
             return "Remove Shell — \(product.displayPrice)"
         }
         return "Remove Shell — £0.99"
-    }
-    
-    private var shellColor: Color {
-        if instance.eggType == "JungleEgg" {
-            return Color(red: 0.341, green: 0.818, blue: 1.0)
-        }
-        return Color.gray
     }
     
     // MARK: - Animal Detail Content

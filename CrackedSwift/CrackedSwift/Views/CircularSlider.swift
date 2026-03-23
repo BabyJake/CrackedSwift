@@ -33,6 +33,7 @@ struct CircularSlider: View {
     @State private var angle: Double = 0
     @State private var showEgg: Bool = false
     @State private var shakeOffset: CGFloat = 0
+    @State private var shakeRotation: Double = 0
     @State private var isShaking: Bool = false
     
     private let strokeWidth: CGFloat = 8
@@ -160,6 +161,7 @@ struct CircularSlider: View {
                     }
                     .buttonStyle(.plain)
                     .offset(x: shakeOffset)
+                    .rotationEffect(.degrees(shakeRotation))
                 }
             }
             .offset(y: -5) // Slight upward offset to center in nest
@@ -279,24 +281,31 @@ struct CircularSlider: View {
     
     // MARK: - Shake Animation
     
-    /// Triggers a short shake animation on the egg when the timer starts.
+    /// Triggers a gentle wobble animation on the egg when the timer starts.
     private func triggerShake() {
         isShaking = true
-        let shakeSequence: [(CGFloat, Double)] = [
-            (6, 0.06), (-6, 0.06), (5, 0.05), (-5, 0.05),
-            (3, 0.05), (-3, 0.05), (1.5, 0.04), (-1.5, 0.04), (0, 0.04)
+        // Gentle wobble: small offsets + slight rotation for a cute rocking effect
+        let wobbleSequence: [(offset: CGFloat, rotation: Double, duration: Double)] = [
+            ( 2.5,  4, 0.10), (-2.5, -4, 0.10),
+            ( 2.0,  3, 0.09), (-2.0, -3, 0.09),
+            ( 1.2,  2, 0.08), (-1.2, -2, 0.08),
+            ( 0.5,  1, 0.08), (-0.5, -1, 0.08),
+            ( 0,    0, 0.06)
         ]
         var delay: Double = 0
-        for (offset, duration) in shakeSequence {
-            delay += duration
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-                withAnimation(.easeInOut(duration: duration)) {
-                    shakeOffset = offset
+        for step in wobbleSequence {
+            delay += step.duration
+            let d = delay
+            DispatchQueue.main.asyncAfter(deadline: .now() + d) {
+                withAnimation(.easeInOut(duration: step.duration)) {
+                    shakeOffset = step.offset
+                    shakeRotation = step.rotation
                 }
             }
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + delay + 0.05) {
             shakeOffset = 0
+            shakeRotation = 0
             isShaking = false
         }
     }

@@ -52,9 +52,6 @@ struct PlayerProfileView: View {
                                 .font(.title)
                                 .fontWeight(.bold)
                                 .foregroundColor(.white)
-                            
-                            Text(entry.rankBadge)
-                                .font(.title2)
                         }
                         .padding(.top, 20)
                         

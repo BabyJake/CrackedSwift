@@ -260,14 +260,7 @@ struct LeaderboardRow: View {
                             .font(.caption)
                             .foregroundColor(.yellow.opacity(0.7))
                     }
-                    
-                    Text(entry.rankBadge)
-                        .font(.caption)
                 }
-                
-                Text("Updated \(entry.lastUpdated, style: .relative) ago")
-                    .font(.caption2)
-                    .foregroundColor(.white.opacity(0.4))
             }
             
             Spacer()

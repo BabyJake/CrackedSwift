@@ -468,6 +468,7 @@ struct EggSelectionView: View {
                     )
             )
         }
+        .buttonStyle(.plain)
     }
     
     var body: some View {
@@ -508,9 +509,6 @@ struct HatchResultView: View {
     let animal: Animal
     let coinsEarned: Int
     @Environment(\.dismiss) var dismiss
-    @StateObject private var adManager = AdManager.shared
-    @State private var hasDoubledCoins = false
-    @State private var isLoadingAd = false
     
     var body: some View {
         ZStack {
@@ -561,59 +559,11 @@ struct HatchResultView: View {
                     }
                 }
                 
-                if hasDoubledCoins {
-                    VStack(spacing: 4) {
-                        Text("+\(coinsEarned) Coins")
-                            .font(.headline)
-                            .foregroundColor(.yellow)
-                        Text("+\(coinsEarned) Bonus Coins")
-                            .font(.headline)
-                            .foregroundColor(.green)
-                    }
-                } else {
-                    Text("+\(coinsEarned) Coins")
-                        .font(.headline)
-                        .foregroundColor(.yellow)
-                }
+                Text("+\(coinsEarned) Coins")
+                    .font(.headline)
+                    .foregroundColor(.yellow)
                 
-                // Watch ad to double coins
-                if !hasDoubledCoins {
-                    Button(action: {
-                        isLoadingAd = true
-                        adManager.showRewardedAd { success in
-                            isLoadingAd = false
-                            if success {
-                                GameDataManager.shared.addCoins(coinsEarned)
-                                withAnimation { hasDoubledCoins = true }
-                                print("💰 Doubled coins! +\(coinsEarned) bonus coins awarded")
-                            }
-                        }
-                    }) {
-                        HStack(spacing: 8) {
-                            if isLoadingAd {
-                                ProgressView()
-                                    .tint(.white)
-                            } else {
-                                Image(systemName: "play.rectangle.fill")
-                            }
-                            Text(isLoadingAd ? "Loading Ad..." : "Watch Ad to Double Coins")
-                        }
-                        .font(.headline)
-                        .foregroundColor(.white)
-                        .padding()
-                        .frame(maxWidth: .infinity)
-                        .background(
-                            LinearGradient(
-                                colors: [Color.orange, Color.yellow.opacity(0.8)],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
-                        .cornerRadius(10)
-                    }
-                    .padding(.horizontal, 40)
-                    .disabled(isLoadingAd || !adManager.isRewardedAdLoaded)
-                }
+                // TODO: Re-enable "Watch Ad to Double Coins" button once ads are implemented
                 
                 Button(action: {
                     dismiss()
@@ -636,9 +586,6 @@ struct HatchResultView: View {
 struct PiggybankResultView: View {
     let coinsEarned: Int
     @Environment(\.dismiss) var dismiss
-    @StateObject private var adManager = AdManager.shared
-    @State private var hasDoubledCoins = false
-    @State private var isLoadingAd = false
     
     var body: some View {
         ZStack {
@@ -686,62 +633,12 @@ struct PiggybankResultView: View {
                 .cornerRadius(20)
                 .shadow(color: .black.opacity(0.3), radius: 10, x: 0, y: 5)
                 
-                if hasDoubledCoins {
-                    VStack(spacing: 4) {
-                        Text("+\(coinsEarned) Coins")
-                            .font(.title)
-                            .fontWeight(.bold)
-                            .foregroundColor(.yellow)
-                        Text("+\(coinsEarned) Bonus Coins")
-                            .font(.title2)
-                            .fontWeight(.bold)
-                            .foregroundColor(.green)
-                    }
-                } else {
-                    Text("+\(coinsEarned) Coins")
-                        .font(.title)
-                        .fontWeight(.bold)
-                        .foregroundColor(.yellow)
-                }
+                Text("+\(coinsEarned) Coins")
+                    .font(.title)
+                    .fontWeight(.bold)
+                    .foregroundColor(.yellow)
                 
-                // Watch ad to double coins
-                if !hasDoubledCoins {
-                    Button(action: {
-                        isLoadingAd = true
-                        adManager.showRewardedAd { success in
-                            isLoadingAd = false
-                            if success {
-                                GameDataManager.shared.addCoins(coinsEarned)
-                                withAnimation { hasDoubledCoins = true }
-                                print("💰 Doubled coins! +\(coinsEarned) bonus coins awarded")
-                            }
-                        }
-                    }) {
-                        HStack(spacing: 8) {
-                            if isLoadingAd {
-                                ProgressView()
-                                    .tint(.white)
-                            } else {
-                                Image(systemName: "play.rectangle.fill")
-                            }
-                            Text(isLoadingAd ? "Loading Ad..." : "Watch Ad to Double Coins")
-                        }
-                        .font(.headline)
-                        .foregroundColor(.white)
-                        .padding()
-                        .frame(maxWidth: .infinity)
-                        .background(
-                            LinearGradient(
-                                colors: [Color.orange, Color.yellow.opacity(0.8)],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
-                        .cornerRadius(10)
-                    }
-                    .padding(.horizontal, 40)
-                    .disabled(isLoadingAd || !adManager.isRewardedAdLoaded)
-                }
+                // TODO: Re-enable "Watch Ad to Double Coins" button once ads are implemented
                 
                 Button(action: {
                     dismiss()
@@ -765,65 +662,86 @@ struct StreakRewardsView: View {
     @StateObject private var gameData = GameDataManager.shared
     @StateObject private var shopManager = ShopManager.shared
     @Environment(\.dismiss) var dismiss
-    
+
+    // Fixed milestone days shown on the roadmap
+    private let milestones: [Int] = [1, 3, 7, 14, 30]
+
     var body: some View {
         ZStack {
             AppColors.backgroundGreen
                 .ignoresSafeArea()
-            
+
             NavigationView {
                 ScrollView {
-                    VStack(spacing: 20) {
-                        // Current streak display
-                        HStack(spacing: 8) {
-                            Image(systemName: "flame.fill")
-                                .foregroundColor(.orange)
-                                .font(.system(size: 24))
-                            
-                            Text("Current Streak: \(gameData.getCurrentStreak())")
-                                .font(.title2)
+                    VStack(spacing: 24) {
+
+                        // MARK: – Current streak badge
+                        VStack(spacing: 6) {
+                            ZStack {
+                                Circle()
+                                    .fill(
+                                        LinearGradient(
+                                            colors: [.orange, .red],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        )
+                                    )
+                                    .frame(width: 80, height: 80)
+
+                                Text("\(gameData.getCurrentStreak())")
+                                    .font(.system(size: 34, weight: .heavy, design: .rounded))
+                                    .foregroundColor(.white)
+                            }
+
+                            Text("Day Streak")
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.white.opacity(0.8))
+                        }
+                        .padding(.top, 8)
+
+                        // MARK: – This-week progress (days 1-7)
+                        WeekProgressRow(currentStreak: gameData.getCurrentStreak())
+                            .padding(.horizontal)
+
+                        // MARK: – Milestone roadmap
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text("Milestone Rewards")
+                                .font(.title3)
                                 .fontWeight(.bold)
                                 .foregroundColor(.white)
-                        }
-                        .padding()
-                        .background(
-                            RoundedRectangle(cornerRadius: 16)
-                                .fill(Color.black.opacity(0.3))
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 16)
-                                .stroke(
-                                    LinearGradient(
-                                        colors: [.orange, .yellow],
-                                        startPoint: .leading,
-                                        endPoint: .trailing
-                                    ),
-                                    lineWidth: 2
-                                )
-                        )
-                        .padding(.top)
-                        
-                        // Potential rewards for upcoming days
-                        VStack(alignment: .leading, spacing: 16) {
-                            Text("Potential Rewards")
-                                .font(.title3)
-                                .fontWeight(.semibold)
-                                .foregroundColor(.white)
                                 .padding(.horizontal)
-                            
-                            // Show rewards for current streak and next few days
-                            ForEach(0..<7) { offset in
-                                let day = gameData.getCurrentStreak() + offset
+                                .padding(.bottom, 12)
+
+                            ForEach(Array(milestones.enumerated()), id: \.offset) { idx, day in
                                 let reward = gameData.getPotentialReward(for: day)
-                                
-                                RewardRowView(
+                                let reached = gameData.getCurrentStreak() >= day
+                                MilestoneRow(
                                     day: day,
                                     coins: reward.coins,
-                                    eggName: reward.egg
+                                    eggName: reward.egg,
+                                    reached: reached,
+                                    isLast: idx == milestones.count - 1
                                 )
                             }
                         }
                         .padding()
+                        .background(
+                            RoundedRectangle(cornerRadius: 20)
+                                .fill(Color.white.opacity(0.06))
+                        )
+                        .padding(.horizontal)
+
+                        // MARK: – Daily base info
+                        HStack(spacing: 8) {
+                            Image(systemName: "info.circle")
+                                .foregroundColor(.white.opacity(0.5))
+                            Text("You earn 25 coins every day you log in, plus milestone bonuses.")
+                                .font(.caption)
+                                .foregroundColor(.white.opacity(0.5))
+                        }
+                        .padding(.horizontal)
+                        .padding(.bottom, 20)
                     }
                 }
                 .background(AppColors.backgroundGreen)
@@ -833,13 +751,138 @@ struct StreakRewardsView: View {
                 .toolbarBackground(.visible, for: .navigationBar)
                 .toolbar {
                     ToolbarItem(placement: .navigationBarTrailing) {
-                        Button("Done") {
-                            dismiss()
-                        }
-                        .foregroundColor(.white)
+                        Button("Done") { dismiss() }
+                            .foregroundColor(.white)
                     }
                 }
             }
+        }
+    }
+}
+
+// MARK: – Week progress dots (Sun-Sat style)
+
+private struct WeekProgressRow: View {
+    let currentStreak: Int
+
+    // How many of the last 7 days are "filled"
+    private var filledDays: Int {
+        min(currentStreak, 7)
+    }
+
+    var body: some View {
+        VStack(spacing: 8) {
+            Text("This Week")
+                .font(.subheadline)
+                .fontWeight(.semibold)
+                .foregroundColor(.white.opacity(0.7))
+
+            HStack(spacing: 10) {
+                ForEach(1...7, id: \.self) { day in
+                    let filled = day <= filledDays
+                    ZStack {
+                        Circle()
+                            .fill(filled
+                                  ? LinearGradient(colors: [.orange, .yellow], startPoint: .top, endPoint: .bottom)
+                                  : LinearGradient(colors: [Color.white.opacity(0.12), Color.white.opacity(0.06)], startPoint: .top, endPoint: .bottom))
+                            .frame(width: 36, height: 36)
+                        if filled {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundColor(.white)
+                        } else {
+                            Text("\(day)")
+                                .font(.system(size: 14, weight: .medium, design: .rounded))
+                                .foregroundColor(.white.opacity(0.35))
+                        }
+                    }
+                }
+            }
+        }
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.white.opacity(0.06))
+        )
+    }
+}
+
+// MARK: – Single milestone row with connector line
+
+private struct MilestoneRow: View {
+    let day: Int
+    let coins: Int
+    let eggName: String?
+    let reached: Bool
+    let isLast: Bool
+    @StateObject private var shopManager = ShopManager.shared
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 14) {
+            // Left: circle + vertical connector
+            VStack(spacing: 0) {
+                ZStack {
+                    Circle()
+                        .fill(reached
+                              ? LinearGradient(colors: [.orange, .yellow], startPoint: .topLeading, endPoint: .bottomTrailing)
+                              : LinearGradient(colors: [Color.white.opacity(0.15), Color.white.opacity(0.08)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                        .frame(width: 44, height: 44)
+
+                    if reached {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundColor(.white)
+                    } else {
+                        Text("\(day)")
+                            .font(.system(size: 16, weight: .bold, design: .rounded))
+                            .foregroundColor(.white.opacity(0.45))
+                    }
+                }
+
+                if !isLast {
+                    Rectangle()
+                        .fill(reached ? Color.orange.opacity(0.5) : Color.white.opacity(0.1))
+                        .frame(width: 3, height: 40)
+                }
+            }
+
+            // Right: reward info
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Day \(day)")
+                    .font(.headline)
+                    .foregroundColor(reached ? .white : .white.opacity(0.6))
+
+                HStack(spacing: 10) {
+                    // Egg reward
+                    if let eggName = eggName, let egg = shopManager.getEggByTitle(eggName) {
+                        HStack(spacing: 4) {
+                            if UIImage(named: egg.imageName) != nil {
+                                Image(egg.imageName)
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: 26, height: 26)
+                            }
+                            Text(eggName)
+                                .font(.subheadline)
+                                .foregroundColor(reached ? .white.opacity(0.9) : .white.opacity(0.5))
+                        }
+                    }
+
+                    // Coin reward
+                    HStack(spacing: 4) {
+                        Image(systemName: "circle.fill")
+                            .foregroundColor(AppColors.coinGold)
+                            .font(.system(size: 10))
+                        Text("+\(coins)")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundColor(reached ? AppColors.coinGold : AppColors.coinGold.opacity(0.5))
+                    }
+                }
+            }
+            .padding(.top, 8)
+
+            Spacer()
         }
     }
 }
@@ -849,10 +892,9 @@ struct RewardRowView: View {
     let coins: Int
     let eggName: String?
     @StateObject private var shopManager = ShopManager.shared
-    
+
     var body: some View {
         HStack(spacing: 12) {
-            // Day number
             ZStack {
                 Circle()
                     .fill(
@@ -863,20 +905,19 @@ struct RewardRowView: View {
                         )
                     )
                     .frame(width: 50, height: 50)
-                
+
                 Text("\(day)")
                     .font(.system(size: 18, weight: .bold))
                     .foregroundColor(.white)
             }
-            
+
             VStack(alignment: .leading, spacing: 4) {
                 Text("Day \(day)")
                     .font(.headline)
                     .foregroundColor(.white)
-                
+
                 HStack(spacing: 8) {
                     if let eggName = eggName, let egg = shopManager.getEggByTitle(eggName) {
-                        // Show egg image if available
                         Group {
                             if UIImage(named: egg.imageName) != nil {
                                 Image(egg.imageName)
@@ -889,18 +930,18 @@ struct RewardRowView: View {
                                     .font(.system(size: 20))
                             }
                         }
-                        
+
                         Text(eggName)
                             .font(.subheadline)
                             .foregroundColor(.white.opacity(0.9))
                     }
-                    
+
                     if coins > 0 {
                         if eggName != nil {
                             Text("+")
                                 .foregroundColor(.white.opacity(0.7))
                         }
-                        
+
                         HStack(spacing: 4) {
                             Image(systemName: "circle.fill")
                                 .foregroundColor(AppColors.coinGold)
@@ -912,7 +953,7 @@ struct RewardRowView: View {
                     }
                 }
             }
-            
+
             Spacer()
         }
         .padding()
