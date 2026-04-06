@@ -54,12 +54,44 @@ class GameDataManager: ObservableObject {
     }
     
     /// Replaces local game data with cloud data (used during cloud restore).
+    /// Preserves any active timer state so CloudKit sync doesn't wipe a running session.
     func replaceGameData(_ newData: GameData) {
-        self.gameData = newData
-        if let encoded = try? JSONEncoder().encode(newData) {
+        // If there is an active timer session locally, preserve the timer
+        // fields — the cloud copy almost certainly has stale/cleared timer state.
+        var merged = newData
+        if gameData.wasTimerRunning, gameData.savedSessionStartTime != nil {
+            merged.savedTimeRemaining       = gameData.savedTimeRemaining
+            merged.savedSessionStartTime    = gameData.savedSessionStartTime
+            merged.wasTimerRunning           = gameData.wasTimerRunning
+            merged.savedActiveEggTitle      = gameData.savedActiveEggTitle
+            merged.savedIsPiggybankMode     = gameData.savedIsPiggybankMode
+            merged.savedBackgroundTime      = gameData.savedBackgroundTime
+            merged.savedInitialTimerDuration = gameData.savedInitialTimerDuration
+            // Also preserve break state if active
+            merged.isOnBreak                = gameData.isOnBreak
+            merged.breakStartTime           = gameData.breakStartTime
+            merged.lastBreakTime            = gameData.lastBreakTime
+            print("☁️ [GameData] replaceGameData: preserved active timer state")
+        }
+        self.gameData = merged
+        if let encoded = try? JSONEncoder().encode(merged) {
             userDefaults.set(encoded, forKey: gameDataKey)
         }
         objectWillChange.send()
+    }
+    
+    /// Resets all local game data to a fresh state (used during account deletion).
+    func resetAllData() {
+        self.gameData = GameData()
+        // Give the default starter egg
+        gameData.purchasedEggs["FarmEgg"] = 1
+        gameData.currentSelectedEgg = "FarmEgg"
+        userDefaults.removeObject(forKey: gameDataKey)
+        if let encoded = try? JSONEncoder().encode(gameData) {
+            userDefaults.set(encoded, forKey: gameDataKey)
+        }
+        objectWillChange.send()
+        print("🗑️ [GameData] All data reset to fresh state")
     }
     
     // MARK: - Coins
@@ -181,6 +213,12 @@ class GameDataManager: ObservableObject {
     }
     
     // MARK: - Timer State
+    
+    /// Clears the saved background timestamp so a stale value doesn't
+    /// corrupt the elapsed-time calculation on the next cold-launch restore.
+    func clearSavedBackgroundTime() {
+        gameData.savedBackgroundTime = nil
+    }
     
     func saveTimerState(timeRemaining: TimeInterval, wasRunning: Bool, sessionStartTime: Date?, activeEggTitle: String?, isPiggybankMode: Bool, backgroundTime: Date? = nil, initialTimerDuration: TimeInterval? = nil) {
         gameData.savedTimeRemaining = timeRemaining
@@ -602,11 +640,6 @@ class GameDataManager: ObservableObject {
     }
     
     // MARK: - Debug
-    
-    func resetAllData() {
-        gameData = GameData()
-        saveGameData()
-    }
     
 
 }

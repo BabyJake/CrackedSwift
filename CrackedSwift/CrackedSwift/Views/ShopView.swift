@@ -21,7 +21,7 @@ struct ShopView: View {
             AppColors.backgroundGreen
                 .ignoresSafeArea()
             
-        NavigationView {
+        NavigationStack {
             VStack {
                 // Coin Display
                     HStack {

@@ -446,6 +446,60 @@ class LeaderboardManager: ObservableObject {
         }
     }
     
+    // MARK: - Delete All User Data (Account Deletion)
+    
+    /// Deletes the user's leaderboard record, all friend relationships, and all friend requests.
+    /// Called during account deletion.
+    func deleteAllUserData() async {
+        guard let userID = myUserID else {
+            print("[Leaderboard] deleteAllUserData: No userID")
+            return
+        }
+        
+        var recordIDsToDelete: [CKRecord.ID] = []
+        
+        // 1. Delete leaderboard entry
+        recordIDsToDelete.append(leaderboardRecordID(for: userID))
+        
+        // 2. Collect friend relation record IDs (both directions)
+        for friend in friends {
+            recordIDsToDelete.append(friendRelationRecordID(from: userID, to: friend.friendID))
+            recordIDsToDelete.append(friendRelationRecordID(from: friend.friendID, to: userID))
+        }
+        
+        // 3. Collect incoming request record IDs
+        for request in incomingRequests {
+            recordIDsToDelete.append(friendRequestRecordID(from: request.fromUserID, to: userID))
+        }
+        
+        // 4. Collect outgoing request record IDs
+        for request in outgoingRequests {
+            recordIDsToDelete.append(friendRequestRecordID(from: userID, to: request.toUserID))
+        }
+        
+        // 5. Batch delete all records
+        if !recordIDsToDelete.isEmpty {
+            do {
+                try await publicDB.modifyRecords(saving: [], deleting: recordIDsToDelete)
+                print("[Leaderboard] 🗑️ Deleted \(recordIDsToDelete.count) records")
+            } catch {
+                print("[Leaderboard] Failed to batch delete: \(error)")
+            }
+        }
+        
+        // 6. Clear local state
+        globalEntries = []
+        friendEntries = []
+        friends = []
+        incomingRequests = []
+        outgoingRequests = []
+        searchResults = []
+        myUserID = nil
+        UserDefaults.standard.removeObject(forKey: userIDKey)
+        
+        print("[Leaderboard] 🗑️ All user data deleted")
+    }
+    
     // MARK: - Fetch Friends (CKQuery)
     
     func fetchFriends() async {

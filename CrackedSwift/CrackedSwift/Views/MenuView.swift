@@ -13,6 +13,7 @@ struct MenuView: View {
     @StateObject private var timerManager = TimerManager.shared
     @StateObject private var shopManager = ShopManager.shared
     @StateObject private var animalManager = AnimalManager.shared
+    @StateObject private var tutorial = TutorialManager.shared
     
     @State private var selectedMinutes: Int = 30
     @State private var showingEggSelection = false
@@ -32,6 +33,7 @@ struct MenuView: View {
     @State private var sliderIsDragging = false
     @State private var showRarityRing = false
     @State private var ringFadeWorkItem: DispatchWorkItem?
+    @State private var tutorialPulse = false
     // Screen Time settings UI commented out — using Darwin lock detection instead.
     // @State private var showingSettings = false
     
@@ -154,23 +156,8 @@ struct MenuView: View {
                             initialTimerDuration = duration
                             isGiveUpShell = false // Reset flag when starting new timer
                             
-                            // Set up callbacks
-                            timerManager.onTimerComplete = { studyDuration in
-                                handleTimerComplete(studyDuration: studyDuration)
-                            }
-                            timerManager.onCoinsAwarded = { coins in
-                                coinsEarned = coins
-                            }
-                            timerManager.onEggCracked = { shell in
-                                crackedShell = shell
-                                // isGiveUpShell is already set in the give up button action
-                                showingEggCrackedAlert = true
-                                initialTimerDuration = 0
-                            }
-                            timerManager.onPiggybankShattered = {
-                                showingPiggybankShatteredAlert = true
-                                initialTimerDuration = 0
-                            }
+                            // Set up callbacks (also wired in onAppear for cold-launch restore)
+                            wireUpTimerCallbacks()
                             
                             // Close egg selection menu if open
                             showingEggSelection = false
@@ -225,10 +212,35 @@ struct MenuView: View {
                             initialDuration: initialTimerDuration,
                             currentEggImageName: currentEggImageName,
                             hasEggSelected: shopManager.getCurrentEgg() != nil,
-                            onEggTap: { showingEggSelection = true }
+                            onEggTap: {
+                                if tutorial.isActive && tutorial.currentStep == .tapNest {
+                                    tutorial.next() // → .showPiggybank
+                                    tutorial.requestEggSelection = true
+                                    return
+                                }
+                                showingEggSelection = true
+                            }
                         )
                     }
-                    .frame(width: 330, height: 330)
+                    .frame(
+                        width: min(330, UIScreen.main.bounds.width - 60),
+                        height: min(330, UIScreen.main.bounds.width - 60)
+                    )
+                    .overlay {
+                        // Tutorial pulsing spotlight ring
+                        if tutorial.isActive && tutorial.currentStep == .tapNest {
+                            Circle()
+                                .stroke(Color.yellow, lineWidth: 3)
+                                .scaleEffect(tutorialPulse ? 1.06 : 1.0)
+                                .opacity(tutorialPulse ? 0.4 : 1.0)
+                                .animation(
+                                    .easeInOut(duration: 1.0).repeatForever(autoreverses: true),
+                                    value: tutorialPulse
+                                )
+                                .onAppear { tutorialPulse = true }
+                                .onDisappear { tutorialPulse = false }
+                        }
+                    }
                     .onChange(of: sliderIsDragging) { _, dragging in
                         ringFadeWorkItem?.cancel()
                         if dragging {
@@ -248,6 +260,29 @@ struct MenuView: View {
                         RarityLegendView(distribution: currentRarityDistribution)
                             .opacity(showRarityRing ? 1 : 0)
                             .animation(.easeInOut(duration: 0.35), value: showRarityRing)
+                    }
+                    
+                    // Tutorial "Tap the nest" tooltip
+                    if tutorial.isActive && tutorial.currentStep == .tapNest {
+                        HStack(spacing: 8) {
+                            Image(systemName: "hand.tap.fill")
+                                .font(.title3)
+                                .foregroundColor(.yellow)
+                            Text("Tap the nest to choose an egg!")
+                                .font(.system(size: 16, weight: .semibold, design: .rounded))
+                                .foregroundColor(.white)
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 12)
+                        .background(
+                            Capsule()
+                                .fill(Color.black.opacity(0.7))
+                                .overlay(
+                                    Capsule()
+                                        .stroke(Color.yellow.opacity(0.4), lineWidth: 1)
+                                )
+                        )
+                        .transition(.scale.combined(with: .opacity))
                     }
                 }
                 .padding(.bottom, 20)
@@ -311,6 +346,31 @@ struct MenuView: View {
             // .sheet(isPresented: $showingSettings) {
             //     SettingsView()
             // }
+        }
+        .onAppear {
+            // Wire up callbacks immediately so restored sessions (cold launch)
+            // can show alerts/sheets if the timer completes or cracks.
+            wireUpTimerCallbacks()
+        }
+    }
+    
+    /// Set all TimerManager callbacks. Called on appear (for cold-launch restores)
+    /// and also from the Start Timer button (for fresh sessions).
+    private func wireUpTimerCallbacks() {
+        timerManager.onTimerComplete = { studyDuration in
+            handleTimerComplete(studyDuration: studyDuration)
+        }
+        timerManager.onCoinsAwarded = { coins in
+            coinsEarned = coins
+        }
+        timerManager.onEggCracked = { shell in
+            crackedShell = shell
+            showingEggCrackedAlert = true
+            initialTimerDuration = 0
+        }
+        timerManager.onPiggybankShattered = {
+            showingPiggybankShatteredAlert = true
+            initialTimerDuration = 0
         }
     }
     
@@ -476,9 +536,10 @@ struct EggSelectionView: View {
             AppColors.backgroundGreen
                 .ignoresSafeArea()
             
-            NavigationView {
+            NavigationStack {
                 ScrollView {
                     LazyVGrid(columns: [
+
                         GridItem(.adaptive(minimum: 100), spacing: 16)
                     ], spacing: 16) {
                         ForEach(Array(availableEggs.enumerated()), id: \.offset) { index, eggData in
@@ -671,7 +732,7 @@ struct StreakRewardsView: View {
             AppColors.backgroundGreen
                 .ignoresSafeArea()
 
-            NavigationView {
+            NavigationStack {
                 ScrollView {
                     VStack(spacing: 24) {
 

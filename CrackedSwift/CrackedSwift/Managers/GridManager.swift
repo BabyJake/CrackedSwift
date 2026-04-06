@@ -29,8 +29,17 @@ class GridManager: ObservableObject {
     /// The grid cell the dragged animal would land on (computed from drag offset)
     @Published var targetGridPosition: GameData.GridPosition? = nil
     
-    private let tileWidthForCalc: CGFloat = 128
-    private let tileHeightForCalc: CGFloat = 64
+    // Match the responsive tile sizes used by GridView
+    private var tileWidthForCalc: CGFloat {
+        let screenWidth = UIScreen.main.bounds.width
+        let scaleFactor = min(screenWidth / 400, 1.5)
+        return 128 * scaleFactor
+    }
+    private var tileHeightForCalc: CGFloat {
+        let screenWidth = UIScreen.main.bounds.width
+        let scaleFactor = min(screenWidth / 400, 1.5)
+        return 64 * scaleFactor
+    }
     
     func startDragging(_ instanceId: String) {
         draggingInstanceId = instanceId
@@ -126,18 +135,28 @@ class GridManager: ObservableObject {
     func expandGridIfNeeded(reserveSlots: Int = 0) {
         let totalItems = dataManager.getAnimalInstancesCount() + reserveSlots
         // Ensure enough blocks: need at least totalItems blocks
-        // Use odd grid sizes (3,5,7...) so layout stays symmetric and we avoid crash when adding the 10th item (extra row).
+        // Use odd grid sizes (3,5,7...) so layout stays symmetric.
         let requiredSize = Int(ceil(sqrt(Double(totalItems))))
         let oddSize = requiredSize % 2 == 0 ? requiredSize + 1 : requiredSize
-        gridSize = max(minGridSize, oddSize)
+        // Also ensure grid covers the outermost animal coordinate
+        let instances = dataManager.getAnimalInstances()
+        let maxCoord = instances.reduce(0) { max($0, max(abs($1.gridPosition.x), abs($1.gridPosition.y))) }
+        let positionBased = maxCoord * 2 + 1
+        let needed = max(oddSize, positionBased)
+        gridSize = max(minGridSize, needed % 2 == 0 ? needed + 1 : needed)
     }
     
     func calculateGridSizeForItemCount(_ itemCount: Int) {
         // Calculate minimum square grid size for given item count.
-        // Use odd grid sizes (3,5,7...) so layout stays symmetric and we avoid crash when adding the 10th item.
+        // Use odd grid sizes (3,5,7...) so layout stays symmetric.
         let requiredSize = Int(ceil(sqrt(Double(itemCount))))
         let oddSize = requiredSize % 2 == 0 ? requiredSize + 1 : requiredSize
-        gridSize = max(minGridSize, oddSize)
+        // Also ensure grid covers the outermost animal coordinate
+        let instances = dataManager.getAnimalInstances()
+        let maxCoord = instances.reduce(0) { max($0, max(abs($1.gridPosition.x), abs($1.gridPosition.y))) }
+        let positionBased = maxCoord * 2 + 1
+        let needed = max(oddSize, positionBased)
+        gridSize = max(minGridSize, needed % 2 == 0 ? needed + 1 : needed)
     }
     
     func getEmptyPositions(occupiedPositions: Set<GameData.GridPosition>) -> [GameData.GridPosition] {
@@ -279,9 +298,57 @@ class GridManager: ObservableObject {
     
     private func restoreOriginalPositions() {
         let instances = dataManager.getAnimalInstances()
+        var occupiedPositions = Set<GameData.GridPosition>()
+        
+        // Restore originals where possible, tracking collisions.
+        // If an original position is already claimed, leave the instance
+        // un-moved — resolveOverlappingPositions() will fix it below.
         for instance in instances {
-            if let originalPos = dataManager.getOriginalPosition(instance.id) {
-                dataManager.updateAnimalInstancePosition(instance.id, position: originalPos)
+            let target = dataManager.getOriginalPosition(instance.id) ?? instance.gridPosition
+            if !occupiedPositions.contains(target) {
+                dataManager.updateAnimalInstancePosition(instance.id, position: target)
+                occupiedPositions.insert(target)
+            }
+            // else: original already taken — skip for now
+        }
+        
+        // Fix any remaining stacked positions
+        expandGridIfNeeded()
+        resolveOverlappingPositions()
+    }
+    
+    /// Finds all positions occupied by more than one instance and moves the extras to empty cells.
+    private func resolveOverlappingPositions() {
+        let instances = dataManager.getAnimalInstances()
+        expandGridIfNeeded()
+        
+        var positionMap: [GameData.GridPosition: [String]] = [:]
+        for instance in instances {
+            positionMap[instance.gridPosition, default: []].append(instance.id)
+        }
+        
+        var occupiedPositions = Set(positionMap.keys)
+        
+        for (_, ids) in positionMap where ids.count > 1 {
+            // Keep the first instance at this position; move the rest
+            for extraId in ids.dropFirst() {
+                let emptyPositions = getEmptyPositions(occupiedPositions: occupiedPositions)
+                if let newPos = emptyPositions.randomElement() {
+                    dataManager.updateAnimalInstancePosition(extraId, position: newPos)
+                    dataManager.setOriginalPosition(extraId, position: newPos)
+                    occupiedPositions.insert(newPos)
+                    print("🦁 ⚠️ Resolved overlap: moved \(extraId) to (\(newPos.x), \(newPos.y))")
+                } else {
+                    // Grid full — expand and retry
+                    gridSize += 2 // keep odd
+                    let expanded = getEmptyPositions(occupiedPositions: occupiedPositions)
+                    if let newPos = expanded.randomElement() {
+                        dataManager.updateAnimalInstancePosition(extraId, position: newPos)
+                        dataManager.setOriginalPosition(extraId, position: newPos)
+                        occupiedPositions.insert(newPos)
+                        print("🦁 ⚠️ Resolved overlap (after expand): moved \(extraId) to (\(newPos.x), \(newPos.y))")
+                    }
+                }
             }
         }
     }
@@ -299,57 +366,32 @@ class GridManager: ObservableObject {
         let halfSize = gridSize / 2
         var occupiedPositions = Set<GameData.GridPosition>()
         
-        // First, mark positions that are already in valid grid positions
+        // Collect instances that need relocation: out-of-grid OR duplicate in-grid positions
+        var needsRelocation: [GameData.AnimalInstance] = []
+        
         for instance in instances {
-            if isPositionInGrid(instance.gridPosition) {
+            if isPositionInGrid(instance.gridPosition) && !occupiedPositions.contains(instance.gridPosition) {
+                // Valid, unique in-grid position — keep it
                 occupiedPositions.insert(instance.gridPosition)
+            } else {
+                // Either out-of-grid or a duplicate — must relocate
+                needsRelocation.append(instance)
             }
         }
         
-        // Reposition instances that are outside the grid
-        for instance in instances {
-            if !isPositionInGrid(instance.gridPosition) {
-                // Find an empty position within the grid
-                let emptyPositions = getEmptyPositions(occupiedPositions: occupiedPositions)
-                if let newPosition = emptyPositions.first {
-                    dataManager.updateAnimalInstancePosition(instance.id, position: newPosition)
-                    occupiedPositions.insert(newPosition)
-                } else {
-                    // If no empty positions, try to find the closest valid position
-                    // by clamping the coordinates
-                    let minCoord = -halfSize
-                    let maxCoord = -halfSize + gridSize - 1
-                    let clampedX = max(minCoord, min(maxCoord, instance.gridPosition.x))
-                    let clampedY = max(minCoord, min(maxCoord, instance.gridPosition.y))
-                    let clampedPosition = GameData.GridPosition(x: clampedX, y: clampedY)
-                    
-                    // If clamped position is occupied, find nearest empty
-                    if !occupiedPositions.contains(clampedPosition) {
-                        dataManager.updateAnimalInstancePosition(instance.id, position: clampedPosition)
-                        occupiedPositions.insert(clampedPosition)
-                    } else {
-                        // Find nearest empty position
-                        var bestPosition: GameData.GridPosition? = nil
-                        var minDistance = Int.max
-                        
-                        for x in -halfSize..<(-halfSize + gridSize) {
-                            for y in -halfSize..<(-halfSize + gridSize) {
-                                let pos = GameData.GridPosition(x: x, y: y)
-                                if !occupiedPositions.contains(pos) {
-                                    let distance = abs(x - instance.gridPosition.x) + abs(y - instance.gridPosition.y)
-                                    if distance < minDistance {
-                                        minDistance = distance
-                                        bestPosition = pos
-                                    }
-                                }
-                            }
-                        }
-                        
-                        if let newPos = bestPosition {
-                            dataManager.updateAnimalInstancePosition(instance.id, position: newPos)
-                            occupiedPositions.insert(newPos)
-                        }
-                    }
+        // Relocate all collected instances to empty in-grid cells
+        for instance in needsRelocation {
+            let emptyPositions = getEmptyPositions(occupiedPositions: occupiedPositions)
+            if let newPosition = emptyPositions.first {
+                dataManager.updateAnimalInstancePosition(instance.id, position: newPosition)
+                occupiedPositions.insert(newPosition)
+            } else {
+                // Grid full — expand (keep odd) and find the nearest empty
+                gridSize += 2
+                let expanded = getEmptyPositions(occupiedPositions: occupiedPositions)
+                if let newPos = expanded.first {
+                    dataManager.updateAnimalInstancePosition(instance.id, position: newPos)
+                    occupiedPositions.insert(newPos)
                 }
             }
         }

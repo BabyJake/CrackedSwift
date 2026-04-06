@@ -17,6 +17,9 @@ struct AccountView: View {
     @State private var showingBackupConfirm = false
     @State private var showingNameEdit = false
     @State private var editedName = ""
+    @State private var showingDeleteConfirm = false
+    @State private var showingDeleteFinalConfirm = false
+    @State private var isDeletingAccount = false
     
     var body: some View {
         NavigationStack {
@@ -207,6 +210,32 @@ struct AccountView: View {
                     }
                 }
                 .listRowBackground(Color.clear)
+                
+                // Delete account section
+                Section {
+                    Button(action: {
+                        showingDeleteConfirm = true
+                    }) {
+                        HStack {
+                            if isDeletingAccount {
+                                ProgressView()
+                                    .tint(.red)
+                                    .frame(width: 30)
+                            } else {
+                                Image(systemName: "trash.fill")
+                                    .foregroundColor(.red)
+                                    .frame(width: 30)
+                            }
+                            Text("Delete Account")
+                                .foregroundColor(.red)
+                        }
+                    }
+                    .disabled(isDeletingAccount)
+                } footer: {
+                    Text("Permanently deletes your account and all associated data including cloud saves, leaderboard stats, and friend connections. This action cannot be undone.")
+                        .foregroundColor(.white.opacity(0.5))
+                }
+                .listRowBackground(Color.clear)
             }
             .scrollContentBackground(.hidden)
             .listStyle(.insetGrouped)
@@ -229,6 +258,27 @@ struct AccountView: View {
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text("This will replace your current local data with the cloud save. Any local progress not backed up will be lost.")
+            }
+            .alert("Delete Account?", isPresented: $showingDeleteConfirm) {
+                Button("Delete Account", role: .destructive) {
+                    showingDeleteFinalConfirm = true
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This will permanently delete your account, all game progress, cloud saves, leaderboard data, and friend connections. This action cannot be undone.")
+            }
+            .alert("Are you sure?", isPresented: $showingDeleteFinalConfirm) {
+                Button("Delete Everything", role: .destructive) {
+                    isDeletingAccount = true
+                    Task {
+                        await authManager.deleteAccount()
+                        isDeletingAccount = false
+                        dismiss()
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This is your last chance. All data will be permanently erased and cannot be recovered.")
             }
         }
     }

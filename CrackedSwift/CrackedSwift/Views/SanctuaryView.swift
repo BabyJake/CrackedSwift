@@ -37,7 +37,7 @@ struct SanctuaryView: View {
             )
             .ignoresSafeArea()
             
-            NavigationView {
+            NavigationStack {
                 VStack(spacing: 0) {
                     // Animal count header
                     HStack {
@@ -192,6 +192,9 @@ struct SanctuaryView: View {
                     AnimalDetailSheet(instance: instance)
                 }
                 .onAppear {
+                    // Restore original positions first so filter-repositioned animals
+                    // don't confuse the grid sizing or new-animal placement.
+                    gridManager.reorganizeForView(selectedView)
                     processPendingItems()
                     // First paint: load without mutating GameDataManager (skipReposition) to avoid crash when swapping to tab
                     DispatchQueue.main.async {
@@ -217,22 +220,32 @@ struct SanctuaryView: View {
     
     // --- Helper Methods inside SanctuaryView ---
     
-    /// Grid size used for layout; always at least large enough to fit all visible instances (avoids crash when adding 10th item).
+    /// Grid size used for layout; always at least large enough to fit all visible instances
+    /// AND cover every animal's actual grid position. Always returns an odd number so the
+    /// grid is symmetric around (0,0) and matches positions produced by placeAnimal/expandGridIfNeeded.
     private var effectiveGridSize: Int {
-        let minSize = visibleInstances.isEmpty ? 3 : Int(ceil(sqrt(Double(visibleInstances.count))))
-        return max(3, max(gridSize, minSize))
+        // 1. Size from count
+        let countBased = visibleInstances.isEmpty ? 3 : Int(ceil(sqrt(Double(visibleInstances.count))))
+        // 2. Size from actual positions — grid must span the outermost coordinate
+        let maxCoord = visibleInstances.reduce(0) { max($0, max(abs($1.gridPosition.x), abs($1.gridPosition.y))) }
+        let positionBased = maxCoord * 2 + 1 // covers -maxCoord … maxCoord
+        // 3. Take the larger, force odd, floor at 3
+        let raw = max(3, max(gridSize, max(countBased, positionBased)))
+        return raw % 2 == 0 ? raw + 1 : raw
     }
 
     private func fitGridToScreen(in size: CGSize) {
         guard size.width > 0, size.height > 0 else { return }
-        let baseTileWidth: CGFloat = 128
-        let baseTileHeight: CGFloat = 64
+        // Scale tile sizes responsively: smaller tiles on wider screens to fit more
+        let scaleFactor = min(size.width / 400, 1.5) // Responsive scaling
+        let baseTileWidth: CGFloat = 128 * scaleFactor
+        let baseTileHeight: CGFloat = 64 * scaleFactor
         let sizeToFit = effectiveGridSize
         let gridPixelWidth = CGFloat(sizeToFit) * baseTileWidth
         let gridPixelHeight = CGFloat(sizeToFit) * baseTileHeight
         
-        let targetWidth = gridPixelWidth * 1.2
-        let targetHeight = gridPixelHeight * 1.2
+        let targetWidth = gridPixelWidth * 1.1
+        let targetHeight = gridPixelHeight * 1.1
         guard targetWidth > 0, targetHeight > 0 else { return }
         
         let widthScale = size.width / targetWidth
@@ -240,8 +253,8 @@ struct SanctuaryView: View {
         let fitScale = min(widthScale, heightScale)
         guard fitScale.isFinite, fitScale > 0 else { return }
         
-        zoomScale = min(max(fitScale, 0.3), 1.2)
-        panOffset = CGSize(width: 0, height: 50)
+        zoomScale = min(max(fitScale, 0.25), 1.0)
+        panOffset = CGSize(width: 0, height: size.height * 0.08)
     }
     
     private func processPendingItems() {
@@ -295,13 +308,24 @@ struct GridView: View {
     var onDragChanged: ((GameData.AnimalInstance, CGSize) -> Void)? = nil
     var onDragEnded: ((GameData.AnimalInstance) -> Void)? = nil
     
-    private let tileWidth: CGFloat = 128
-    private let tileHeight: CGFloat = 64
+    // Responsive tile sizes based on screen width
+    private var tileWidth: CGFloat {
+        let screenWidth = UIScreen.main.bounds.width
+        let scaleFactor = min(screenWidth / 400, 1.5)
+        return 128 * scaleFactor
+    }
+    private var tileHeight: CGFloat {
+        let screenWidth = UIScreen.main.bounds.width
+        let scaleFactor = min(screenWidth / 400, 1.5)
+        return 64 * scaleFactor
+    }
     
     init(instances: [GameData.AnimalInstance], gridSize: Int, draggingInstanceId: String? = nil, dragOffset: CGSize = .zero, targetGridPosition: GameData.GridPosition? = nil, onAnimalTapped: ((GameData.AnimalInstance) -> Void)? = nil, onDragChanged: ((GameData.AnimalInstance, CGSize) -> Void)? = nil, onDragEnded: ((GameData.AnimalInstance) -> Void)? = nil) {
         var seen = Set<String>()
         self.instances = instances.filter { !$0.id.isEmpty && seen.insert($0.id).inserted }
-        self.gridSize = max(3, gridSize)
+        // Ensure odd so grid is symmetric around (0,0) — matches placeAnimal positions
+        let raw = max(3, gridSize)
+        self.gridSize = raw % 2 == 0 ? raw + 1 : raw
         self.draggingInstanceId = draggingInstanceId
         self.dragOffset = dragOffset
         self.targetGridPosition = targetGridPosition
@@ -329,11 +353,13 @@ struct GridView: View {
                     
                     // Highlight the drop target tile
                     if isDropTarget {
+                        let tw = tileWidth
+                        let th = tileHeight
                         Path { path in
-                            path.move(to: CGPoint(x: 64, y: 0))
-                            path.addLine(to: CGPoint(x: 128, y: 32))
-                            path.addLine(to: CGPoint(x: 64, y: 64))
-                            path.addLine(to: CGPoint(x: 0, y: 32))
+                            path.move(to: CGPoint(x: tw / 2, y: 0))
+                            path.addLine(to: CGPoint(x: tw, y: th / 2))
+                            path.addLine(to: CGPoint(x: tw / 2, y: th))
+                            path.addLine(to: CGPoint(x: 0, y: th / 2))
                             path.closeSubpath()
                         }
                         .fill(
@@ -346,10 +372,10 @@ struct GridView: View {
                         )
                         .overlay(
                             Path { path in
-                                path.move(to: CGPoint(x: 64, y: 0))
-                                path.addLine(to: CGPoint(x: 128, y: 32))
-                                path.addLine(to: CGPoint(x: 64, y: 64))
-                                path.addLine(to: CGPoint(x: 0, y: 32))
+                                path.move(to: CGPoint(x: tw / 2, y: 0))
+                                path.addLine(to: CGPoint(x: tw, y: th / 2))
+                                path.addLine(to: CGPoint(x: tw / 2, y: th))
+                                path.addLine(to: CGPoint(x: 0, y: th / 2))
                                 path.closeSubpath()
                             }
                             .stroke(Color(hex: "#A8E6C3").opacity(0.6), lineWidth: 1.5)
@@ -477,23 +503,27 @@ struct GrassTileView: View {
                     .resizable()
                     .scaledToFill()
             } else {
-                // Fallback shape
-                Path { path in
-                    path.move(to: CGPoint(x: 64, y: 0))
-                    path.addLine(to: CGPoint(x: 128, y: 32))
-                    path.addLine(to: CGPoint(x: 64, y: 64))
-                    path.addLine(to: CGPoint(x: 0, y: 32))
-                }
-                .fill(Color.green.opacity(0.4))
-                .overlay(
+                // Fallback diamond shape — uses GeometryReader to match any tile size
+                GeometryReader { geo in
+                    let w = geo.size.width
+                    let h = geo.size.height
                     Path { path in
-                        path.move(to: CGPoint(x: 64, y: 0))
-                        path.addLine(to: CGPoint(x: 128, y: 32))
-                        path.addLine(to: CGPoint(x: 64, y: 64))
-                        path.addLine(to: CGPoint(x: 0, y: 32))
+                        path.move(to: CGPoint(x: w / 2, y: 0))
+                        path.addLine(to: CGPoint(x: w, y: h / 2))
+                        path.addLine(to: CGPoint(x: w / 2, y: h))
+                        path.addLine(to: CGPoint(x: 0, y: h / 2))
                     }
-                    .stroke(Color.white.opacity(0.2), lineWidth: 1)
-                )
+                    .fill(Color.green.opacity(0.4))
+                    .overlay(
+                        Path { path in
+                            path.move(to: CGPoint(x: w / 2, y: 0))
+                            path.addLine(to: CGPoint(x: w, y: h / 2))
+                            path.addLine(to: CGPoint(x: w / 2, y: h))
+                            path.addLine(to: CGPoint(x: 0, y: h / 2))
+                        }
+                        .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                    )
+                }
             }
         }
     }
@@ -566,7 +596,7 @@ struct StatisticsView: View {
     @StateObject private var animalManager = AnimalManager.shared
     
     var body: some View {
-        NavigationView {
+        NavigationStack {
             ZStack {
                 LinearGradient(
                     colors: [Color(hex: "#2D5A3F"), Color(hex: "#3D7A5F")],
@@ -817,7 +847,7 @@ struct AnimalDetailSheet: View {
     }
     
     var body: some View {
-        NavigationView {
+        NavigationStack {
             ZStack {
                 LinearGradient(
                     colors: [Color(hex: "#2D5A3F"), Color(hex: "#3D7A5F")],

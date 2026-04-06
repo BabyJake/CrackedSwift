@@ -195,6 +195,38 @@ class AuthManager: ObservableObject {
         hasSetDisplayName = false
     }
     
+    // MARK: - Account Deletion
+    
+    /// Permanently deletes the user's account and all associated data.
+    /// This removes cloud game save, leaderboard entry, friend relationships,
+    /// friend requests, and all local data.
+    func deleteAccount() async {
+        print("🗑️ [Auth] Starting account deletion…")
+        
+        // 1. Delete cloud game save
+        await CloudKitManager.shared.deleteCloudData()
+        print("🗑️ [Auth] Cloud game save deleted")
+        
+        // 2. Delete leaderboard entry, friend relations, and friend requests
+        await LeaderboardManager.shared.deleteAllUserData()
+        print("🗑️ [Auth] Leaderboard data deleted")
+        
+        // 3. Reset local game data to fresh state
+        GameDataManager.shared.resetAllData()
+        print("🗑️ [Auth] Local game data reset")
+        
+        // 4. Reset tutorial so it runs again for the new account
+        TutorialManager.shared.hasCompletedTutorial = false
+        
+        // 5. Clear account prompt flag so first-launch flow shows again
+        hasSeenAccountPrompt = false
+        
+        // 6. Sign out (clears Keychain, profile, local flags)
+        signOutLocally()
+        
+        print("🗑️ [Auth] Account deletion complete")
+    }
+    
     // MARK: - Revocation Listener
     
     private func listenForRevocation() {

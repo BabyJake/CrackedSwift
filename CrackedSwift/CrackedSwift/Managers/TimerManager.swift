@@ -84,6 +84,11 @@ class TimerManager: ObservableObject {
     /// Background task identifier so iOS keeps us alive for the 0.2 s check.
     private var bgTaskId: UIBackgroundTaskIdentifier = .invalid
     
+    /// True when the timer was restored from a cold launch (app termination).
+    /// In this case we cannot determine lock vs. leave — Darwin lock state is lost.
+    /// Default to safe (assume locked) and resume the timer.
+    private var restoredFromTermination: Bool = false
+    
     // Break constants
     private let breakDuration: TimeInterval = 10 * 60 // 10 minutes
     private let breakCooldown: TimeInterval = 60 * 60 // 1 hour between breaks
@@ -98,6 +103,31 @@ class TimerManager: ObservableObject {
     private init() {
         restoreTimerState()
         restoreBreakState()
+        
+        // Safety net: save timer state when iOS terminates the app process.
+        // handleAppBackgrounded() usually runs first, but force-quit, crash,
+        // or extreme memory pressure can skip it.
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.willTerminateNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+                if self.activeEggTitle != nil {
+                    self.dataManager.saveTimerState(
+                        timeRemaining: self.timeRemaining,
+                        wasRunning: true,
+                        sessionStartTime: self.sessionStartTime,
+                        activeEggTitle: self.activeEggTitle,
+                        isPiggybankMode: self.isPiggybankMode,
+                        backgroundTime: Date(),
+                        initialTimerDuration: self.initialTimerDuration
+                    )
+                    print("[CrackedSwift] 🛑 willTerminate: saved timer state as safety net")
+                }
+            }
+        }
     }
     
     // MARK: - Timer Control
@@ -358,17 +388,40 @@ class TimerManager: ObservableObject {
                     // Timer still has time remaining - restore state
                     timeRemaining = adjustedTimeRemaining
                     sessionStartTime = startTime
-                    // Set background time if it exists
-                    backgroundStartTime = state.backgroundTime
-                    // Don't auto-resume - let handleAppForegrounded handle it
-                    isTimerRunning = false
+                    backgroundStartTime = nil // Clear — we'll resume directly
                     
-                    // LockDetectionManager is a singleton that registers on init;
-                    // no extra setup needed. The lock flag from before termination
-                    // is lost, but handleAppForegrounded() will still run and check
-                    // the live protectedData flag (covers the lock-then-relaunch case).
+                    // Mark as cold-launch restore so handleAppForegrounded() skips
+                    // crack detection. Darwin lock state is lost after app termination,
+                    // so we can't distinguish lock from leave. Default to safe (resume).
+                    restoredFromTermination = true
+                    
+                    // Auto-resume the timer immediately. Waiting for
+                    // handleAppForegrounded() is unreliable on cold launch (the
+                    // scene may already be .active before onChange registers, and
+                    // even if it fires, the lock flag is lost → false-positive crack).
+                    isTimerRunning = true
+                    startTimerTick()
+                    
+                    // Restart the Live Activity so the lock screen shows the timer
+                    let eggImageName: String = {
+                        if activeEggTitle == "Piggybank" { return "PiggyBank" }
+                        return shopManager.getEggByTitle(activeEggTitle ?? "")?.imageName ?? (activeEggTitle ?? "")
+                    }()
+                    LiveActivityManager.shared.startLiveActivity(
+                        eggName: activeEggTitle ?? "",
+                        eggImageName: eggImageName,
+                        duration: adjustedTimeRemaining
+                    )
+                    
+                    // Save updated state — explicitly clear backgroundTime so a
+                    // stale timestamp doesn't cause a wrong elapsed calculation if the
+                    // app is terminated again before the next handleAppBackgrounded().
+                    dataManager.clearSavedBackgroundTime()
+                    dataManager.saveTimerState(timeRemaining: timeRemaining, wasRunning: true, sessionStartTime: sessionStartTime, activeEggTitle: activeEggTitle, isPiggybankMode: isPiggybankMode, initialTimerDuration: initialTimerDuration)
+                    
+                    print("[CrackedSwift] 🔄 Timer restored from cold launch with \(String(format: "%.0f", adjustedTimeRemaining))s remaining — auto-resuming (safe default)")
                     // #region agent log
-                    logDebug("TimerManager.swift:329", "Timer restored with time remaining", ["timeRemaining": timeRemaining])
+                    logDebug("TimerManager.swift:329", "Timer restored from cold launch - auto-resuming", ["timeRemaining": timeRemaining])
                     // #endregion
                 } else {
                     // Timer expired while app was closed - complete it
@@ -599,6 +652,20 @@ class TimerManager: ObservableObject {
             "appSwitchDetected": appSwitchDetected
         ])
         // #endregion
+        
+        // ── 0. Cold-launch restore: skip crack detection entirely ──
+        // After app termination, Darwin lock state is lost so we can't tell lock
+        // from leave. restoreTimerState() already resumed the timer safely.
+        if restoredFromTermination {
+            restoredFromTermination = false
+            backgroundStartTime = nil
+            appSwitchDetected = false
+            print("[CrackedSwift] 🟢 Foreground: Cold-launch restore — skipping crack detection")
+            // #region agent log
+            logDebug("TimerManager.swift:544", "Cold-launch restore skip", [:])
+            // #endregion
+            return
+        }
         
         // ── 1. No active session → nothing to do ──
         if activeEggTitle == nil && timeRemaining == 0 {
